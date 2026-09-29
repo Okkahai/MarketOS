@@ -1,3 +1,4 @@
+from app.ai.analyze import run_ai_analysis
 from app.core.config import get_settings
 from app.db.session import get_session_factory
 from app.events.build import run_cluster_events
@@ -7,7 +8,13 @@ from app.market.compute import run_compute_indicators
 from app.market.ingest import run_ingest
 from app.news.ingest import run_news_source, tracked_symbols
 from app.providers import fed
-from app.providers.registry import build_coinbase, build_fed, build_sec, build_tiingo
+from app.providers.registry import (
+    build_anthropic,
+    build_coinbase,
+    build_fed,
+    build_sec,
+    build_tiingo,
+)
 
 
 @celery_app.task(name="marketos.heartbeat")
@@ -137,3 +144,9 @@ def ingest_news_fed() -> str:
 @celery_app.task(name="marketos.cluster_events")
 def cluster_events() -> str:
     return str(run_cluster_events(get_session_factory(), get_settings()))
+
+
+@celery_app.task(name="marketos.ai_analysis")
+def ai_analysis() -> str:
+    settings = get_settings()
+    return str(run_ai_analysis(get_session_factory(), settings, build_anthropic(settings)))

@@ -307,13 +307,14 @@ The row is the state as of the newest article. It is a cache for the dashboard, 
 
 **context_snapshots** (the exact information the AI saw)
 
-`as_of timestamptz, payload jsonb, payload_sha256, builder_version`. Immutable. The payload lists every article id, event id, bar and indicator value included, with their `available_at`, so a reviewer can prove nothing came from the future.
+`as_of timestamptz, payload jsonb, payload_sha256, builder_version`. Immutable (a database trigger rejects UPDATE and DELETE). The payload lists every article id, event id, bar and indicator value included, with their `available_at`, so a reviewer can prove nothing came from the future.
 
 **ai_analyses**
 
 | column | type | notes |
 |---|---|---|
-| context_snapshot_id | fk | |
+| context_snapshot_id, event_id | fk | one snapshot per model call |
+| stage | enum | `triage` or `analysis` |
 | as_of | timestamptz | decision time |
 | model, model_version, prompt_version | text | |
 | request_hash | text | cache key |
@@ -322,12 +323,11 @@ The row is the state as of the newest article. It is a cache for the dashboard, 
 | validation_status | enum | `valid`, `invalid`, `refused`, `error` |
 | validation_errors | jsonb null | |
 | input_tokens, output_tokens | int | |
-| estimated_cost_usd | numeric(12,6) | from a configured price table |
+| estimated_cost_usd | numeric(12,6) | from the operator's `AI_MODEL_PRICES`; 0 for a call that failed before the model answered |
 | latency_ms | int | |
-| cache_hit | bool | |
 | run_id | fk | |
 
-**analysis_events** `analysis_id, event_id`.
+Append-only, like the snapshots. A repeated identical request is not stored again: it is answered from the earlier row (see Phase 5 notes), so there is no `cache_hit` column. `analysis_events` was dropped because every analysis is about exactly one event (`event_id`).
 
 **signals** (the decision journal; one row per asset recommendation, stored whether or not anything trades)
 
@@ -660,7 +660,7 @@ Each phase ends with passing tests, a PR, and an update to this document if a de
 | **2. Market data** (done) | Tiingo + Coinbase adapters, assets, bars, indicators | provider base (retry, rate limit, failure recording), `assets`, `market_prices`, `indicator_values`, `provider_failures`, seed of the 14 assets, market page and price chart | bars stored with correct `available_at`; indicator tests against known values |
 | **3. News** (done) | Tiingo News, SEC EDGAR, Fed RSS | normalization, `content_hash` + title-similarity dedup, ticker extraction, news page | dedup and timestamp tests |
 | **4. Events** (done) | clustering, scoring, asset linking | `events`, `event_sources`, `event_assets`, events page | clustering tests on fixture articles |
-| **5. AI analysis** | context builder, LLM client, schemas | `context_snapshots`, `ai_analyses`, `signals`, triage + main model, cost tracking, cache | lookahead test on snapshots; schema rejection tests |
+| **5. AI analysis** (done) | context builder, LLM client, schemas | `context_snapshots`, `ai_analyses`, `signals`, triage + main model, cost tracking, cache | lookahead test on snapshots; schema rejection tests |
 | **6. Paper trading** | risk engine, fills, ledger, positions | `risk_decisions`, `trades`, `cash_ledger`, `positions`, immutability triggers, reconciliation | accounting, sizing and risk-rule tests |
 | **7. Dashboard** | overview, portfolio, trades, journal, asset detail | signal trace endpoint and the pages listed in the product brief | every position explainable in two clicks |
 | **8. Analytics** | snapshots, evaluations, metrics, benchmarks | `portfolio_snapshots`, `performance_evaluations`, analytics page | metric tests against hand-computed fixtures |
@@ -730,6 +730,27 @@ Left out on purpose:
 - **Cross-source linking of ticker-less items.** Tiingo news arrives tagged with tickers and Fed items with none, so a Tiingo article about a Fed decision will not join the Fed event. Fixing that needs topic tags rather than tickers.
 - **Direction and impact.** No sentiment, no price-reaction measurement. Both belong to Phase 5 and Phase 8.
 - **Live verification.** As before, only fixture headlines and synthetic articles were used. The 0.30 threshold is unproven on real headlines.
+
+### Phase 5 notes: what was built and what was left out
+
+Built: a context builder that assembles, as of one moment, the event and its articles, the price context of the candidate assets and the market regime; a two-stage job (cheap triage model, then the analysis model for relevant events) run every `SCHEDULE_AI_SECONDS`; Pydantic schemas whose JSON Schema is sent to the model as a forced tool call and against which the reply is validated; a decision journal (`signals`) that keeps every recommendation, HOLDs included; append-only `context_snapshots`, `ai_analyses` and `signals` tables; `GET /api/v1/signals`, `/ai/analyses`, `/ai/analyses/{id}` and `/ai/usage`; and the AI journal page.
+
+Behaviour worth knowing:
+
+- **No lookahead.** `build_context(event, as_of)` uses `state_as_of` for the event and `get_bars(as_of)` for prices, and returns nothing for an event whose first article was not yet available. Tests check that a bar not yet usable and an article not yet available are absent.
+- **Untrusted text.** Articles reach the model only inside a `<data>` block, and the system prompt says that block is untrusted, must not be obeyed, and that null means unknown. Beyond the prompt, the reply is checked: the asset must be one of the candidates, cited events and articles must exist in the input, non-HOLD signals need a thesis, bear case and invalidation conditions, and a buy needs a stop loss. A reply that fails is stored with its errors and makes no signal. Model output can never place an order; Phase 6's risk engine applies its own limits.
+- **Cost control.** Events must exceed `AI_MIN_EVENT_IMPORTANCE`; at most `AI_MAX_EVENTS_PER_RUN` per run; one analysis per event per `AI_REANALYZE_HOURS`; an identical request (same model, prompt version and facts, `as_of` ignored) is never repeated, and a cached triage answer is reused; nothing is called once today's estimated spend reaches `AI_DAILY_BUDGET_USD`, and the run says why it stopped. Prices are per million tokens and come only from `AI_MODEL_PRICES`. MarketOS does not guess them, and a model without a price is never called, so the budget can always be enforced.
+- **Failures.** No key or no price is a `skipped` run. An auth or rate-limit error stops the run; other provider errors are recorded (`provider_failures` plus an `ai_analyses` row with status `error`) and the run continues. A refusal, a truncated reply or a reply without the tool call is stored as `refused` or `invalid`.
+- `signals.reference_price` is the last close the model was shown and `reference_price_ts` its bar, so Phase 8 can evaluate each signal against what the model actually saw. `portfolio_context` stays null until Phase 6.
+
+Left out on purpose:
+
+- **Model defaults are unverified.** `AI_TRIAGE_MODEL` defaults to `claude-haiku-4-5-20251001` and `AI_ANALYSIS_MODEL` to `claude-sonnet-5-5`. This build environment cannot reach the API, so the client was tested against mocked responses that follow the documented Messages API (forced `tool_use`). The first live run is the check.
+- **Prompt caching and batching.** Not used; volume is a few events per run.
+- **`analysis_events`.** One event per analysis, so the FK on `ai_analyses` is enough.
+- **Retrying invalid replies.** An invalid triage or analysis is retried on a later run only while the event still qualifies; there is no per-event retry cap beyond the daily budget.
+- **Related past events are shallow:** same category and a shared ticker, with the 5-day move of the first shared asset when its bars are available. It is context, not a base rate.
+- **Portfolio in the prompt** arrives with Phase 6; `vix_proxy` stays null.
 
 ### Future extension points (not in the MVP)
 

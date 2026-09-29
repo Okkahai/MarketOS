@@ -2,6 +2,8 @@
 
 from functools import lru_cache
 
+from app.ai import llm
+from app.ai.llm import AnthropicClient
 from app.core.config import Settings
 from app.providers import coinbase, fed, sec, tiingo
 from app.providers.base import HttpJsonClient, RateLimiter
@@ -68,3 +70,20 @@ def build_fed(settings: Settings) -> HttpJsonClient:
         timeout=settings.provider_http_timeout_seconds,
         max_retries=settings.provider_max_retries,
     )
+
+
+def build_anthropic(settings: Settings) -> AnthropicClient | None:
+    if settings.anthropic_api_key is None:
+        return None
+    http = HttpJsonClient(
+        "anthropic",
+        llm.BASE_URL,
+        headers={
+            "x-api-key": settings.anthropic_api_key.get_secret_value(),
+            "anthropic-version": llm.API_VERSION,
+        },
+        limiter=_limiter("anthropic", 30, 60.0, 0.0),
+        timeout=settings.ai_timeout_seconds,
+        max_retries=settings.provider_max_retries,
+    )
+    return llm.AnthropicClient(http)

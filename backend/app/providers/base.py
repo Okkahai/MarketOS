@@ -119,6 +119,15 @@ class HttpJsonClient:
             exc.endpoint = exc.endpoint or _endpoint(path)
             raise
 
+    def post_json(self, path: str, body: Mapping[str, Any]) -> Any:
+        """POST a JSON body, parse the JSON reply. Same retries and typed errors as get_json."""
+        try:
+            response, attempt = self._request(path, None, body)
+            return _parse(response, self.provider, attempt)
+        except ProviderError as exc:
+            exc.endpoint = exc.endpoint or _endpoint(path)
+            raise
+
     def get_text(self, path: str, params: Mapping[str, Any] | None = None) -> str:
         """GET a text body (RSS/XML). Same retries and errors as get_json."""
         try:
@@ -127,13 +136,19 @@ class HttpJsonClient:
             exc.endpoint = exc.endpoint or _endpoint(path)
             raise
 
-    def _request(self, path: str, params: Mapping[str, Any] | None) -> tuple[httpx.Response, int]:
+    def _request(
+        self, path: str, params: Mapping[str, Any] | None, body: Mapping[str, Any] | None = None
+    ) -> tuple[httpx.Response, int]:
         last_error: ProviderError | None = None
         for attempt in range(self.max_retries + 1):
             if self._limiter:
                 self._limiter.acquire()
             try:
-                response = self._client.get(path, params=params)
+                response = (
+                    self._client.get(path, params=params)
+                    if body is None
+                    else self._client.post(path, json=body)
+                )
             except httpx.HTTPError as exc:
                 last_error = ProviderUnavailable(
                     f"{type(exc).__name__} calling {self.provider}", retry_count=attempt

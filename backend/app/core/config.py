@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     schedule_indicators_seconds: int = Field(default=3600, ge=60)
     schedule_news_seconds: int = Field(default=900, ge=60)
     schedule_events_seconds: int = Field(default=600, ge=60)
+    schedule_ai_seconds: int = Field(default=900, ge=60)
 
     # Market data collection
     market_history_days: int = Field(default=400, ge=30, le=3650)
@@ -65,6 +66,20 @@ class Settings(BaseSettings):
     fred_api_key: SecretStr | None = None
     anthropic_api_key: SecretStr | None = None
     sec_user_agent: str | None = None
+
+    # AI analysis. Prices are per million tokens and must be set by the operator for every model
+    # in use; a model without a price is never called, so the budget can always be enforced.
+    # Example: AI_MODEL_PRICES={"claude-haiku-4-5-20251001":{"input":"1","output":"5"}}
+    ai_triage_model: str = "claude-haiku-4-5-20251001"
+    ai_analysis_model: str = "claude-sonnet-5-5"
+    ai_model_prices: dict[str, dict[str, Decimal]] = Field(default_factory=dict)
+    ai_daily_budget_usd: Decimal = Field(default=Decimal("5"), ge=0)
+    ai_min_event_importance: Decimal = Field(default=Decimal("0.3"), ge=0, le=1)
+    ai_max_events_per_run: int = Field(default=5, ge=1, le=50)
+    ai_reanalyze_hours: int = Field(default=6, ge=1, le=168)
+    ai_max_signals_per_analysis: int = Field(default=3, ge=1, le=10)
+    ai_max_output_tokens: int = Field(default=2000, ge=256, le=8000)
+    ai_timeout_seconds: float = Field(default=120.0, ge=5, le=600)
 
     @field_validator("cors_origins", mode="before")
     @classmethod
