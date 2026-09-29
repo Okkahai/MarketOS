@@ -76,6 +76,30 @@ export type WatchlistRow = {
 
 export type Indicator = { name: string; ts: string; value: string };
 
+export type NewsArticle = {
+  id: string;
+  source: string;
+  title: string;
+  summary: string;
+  url: string;
+  published_at: string;
+  available_at: string;
+  category: string;
+  tickers: string[];
+  countries: string[];
+  duplicate_of_id: string | null;
+  dedup_reason: string | null;
+};
+
+export type NewsSource = {
+  key: string;
+  name: string;
+  kind: string;
+  reliability_weight: string;
+  is_enabled: boolean;
+  terms_note: string;
+};
+
 export type ApiResult<T> =
   | { ok: true; data: T; httpStatus: number }
   | { ok: false; error: string; httpStatus: number | null };
@@ -131,5 +155,13 @@ export const api = {
     ),
   indicators: (symbol: string) =>
     getJson<Indicator[]>(`/api/v1/assets/${encodeURIComponent(symbol)}/indicators`),
+  newsArticles: (params: { ticker?: string; category?: string; duplicates?: boolean } = {}) => {
+    const q = new URLSearchParams({ limit: "100" });
+    if (params.ticker) q.set("ticker", params.ticker);
+    if (params.category) q.set("category", params.category);
+    if (params.duplicates) q.set("include_duplicates", "true");
+    return getJson<NewsArticle[]>(`/api/v1/news/articles?${q}`);
+  },
+  newsSources: () => getJson<NewsSource[]>("/api/v1/news/sources"),
   recentRuns: (limit = 20) => getJson<SystemRun[]>(`/api/v1/system/runs?limit=${limit}`),
 };

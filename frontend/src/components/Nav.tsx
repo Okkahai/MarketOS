@@ -5,7 +5,7 @@ import Link from "next/link";
 const NAV: { label: string; href?: string; phase?: number }[] = [
   { label: "System status", href: "/" },
   { label: "Overview", phase: 7 },
-  { label: "News intelligence", phase: 4 },
+  { label: "News feed", href: "/news" },
   { label: "Market", href: "/market" },
   { label: "Portfolio", phase: 6 },
   { label: "Trades", phase: 6 },

@@ -50,3 +50,14 @@ export function formatUtcDate(iso: string | null): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? "invalid time" : date.toISOString().slice(0, 10);
 }
+
+// Article links come from third-party feeds. The API only stores http(s) URLs; this is the
+// second check before a link is rendered.
+export function safeHttpUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
