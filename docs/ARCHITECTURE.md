@@ -297,11 +297,13 @@ Unique `(source_id, external_id)` and unique `(source_id, canonical_url)`. Check
 
 **events**
 
-`title, summary, category, importance numeric(0..1), confidence numeric(0..1), countries text[], sectors text[], horizon enum (intraday|days|weeks|months), first_seen_at, last_updated_at, available_at, status (open|closed), method (rule|embedding|llm), method_version`.
+`title, summary, category, importance numeric(0..1), confidence numeric(0..1), countries text[], sectors text[], horizon enum (intraday|days|weeks|months), first_seen_at, last_updated_at, available_at, status (open|closed), method (rule|embedding|llm), method_version, score_details jsonb, run_id`. Check constraints on every enum and range, and `available_at <= last_updated_at`.
 
-**event_sources** `event_id, article_id, added_at, similarity numeric` (PK on both ids).
+The row is the state as of the newest article. It is a cache for the dashboard, not a point-in-time record: `first_seen_at` is the earliest `published_at` of its articles, `available_at` the earliest `available_at`, `last_updated_at` the latest. Anything that must know the event as of an earlier time (the Phase 5 context builder, backtests) calls `state_as_of(event_id, as_of)`, which rebuilds it from `event_sources` joined to `news_articles.available_at <= as_of`. The events API does the same when given `as_of`.
 
-**event_assets** `event_id, asset_id, relevance numeric, direction_hint (up|down|mixed|unknown), linked_by (rule|llm), rationale`.
+**event_sources** `event_id, article_id, added_at, similarity numeric` (PK on both ids, plus a unique index on `article_id`: an article belongs to one event). Duplicate copies of an article (Phase 3) join the event of their original, because a copy from another outlet is corroboration.
+
+**event_assets** `event_id, asset_id, relevance numeric (share of the event's articles tagged with the asset), direction_hint (up|down|mixed|unknown), linked_by (rule|llm), rationale`. Derived and rebuilt whenever the event changes. `direction_hint` is always `unknown` until Phase 5 supplies sentiment.
 
 **context_snapshots** (the exact information the AI saw)
 
@@ -657,7 +659,7 @@ Each phase ends with passing tests, a PR, and an update to this document if a de
 | **1. Foundation** | Repo, backend, frontend, Postgres, Redis, Docker, config, health | FastAPI app with `/health/live` and `/health/ready` (checks DB and Redis), settings via env with validation, structured JSON logging, Alembic baseline with `system_runs`, Celery worker + beat skeleton, Next.js shell with navigation and a live system status page, CI | `docker compose up` brings every service to healthy; tests pass in CI |
 | **2. Market data** (done) | Tiingo + Coinbase adapters, assets, bars, indicators | provider base (retry, rate limit, failure recording), `assets`, `market_prices`, `indicator_values`, `provider_failures`, seed of the 14 assets, market page and price chart | bars stored with correct `available_at`; indicator tests against known values |
 | **3. News** (done) | Tiingo News, SEC EDGAR, Fed RSS | normalization, `content_hash` + title-similarity dedup, ticker extraction, news page | dedup and timestamp tests |
-| **4. Events** | clustering, scoring, asset linking | `events`, `event_sources`, `event_assets`, events page | clustering tests on fixture articles |
+| **4. Events** (done) | clustering, scoring, asset linking | `events`, `event_sources`, `event_assets`, events page | clustering tests on fixture articles |
 | **5. AI analysis** | context builder, LLM client, schemas | `context_snapshots`, `ai_analyses`, `signals`, triage + main model, cost tracking, cache | lookahead test on snapshots; schema rejection tests |
 | **6. Paper trading** | risk engine, fills, ledger, positions | `risk_decisions`, `trades`, `cash_ledger`, `positions`, immutability triggers, reconciliation | accounting, sizing and risk-rule tests |
 | **7. Dashboard** | overview, portfolio, trades, journal, asset detail | signal trace endpoint and the pages listed in the product brief | every position explainable in two clicks |
@@ -665,7 +667,7 @@ Each phase ends with passing tests, a PR, and an update to this document if a de
 | **9. Backtesting** | replay clock, historical runs | `ReplayClock`, backtest runner, isolated portfolios | chronology tests: no row read with `available_at > clock` |
 | **10. Hardening** | resilience and ops | provider fallback, monitoring page, alerting, security review, load of 6 months of history | failure-injection tests |
 
-Everything from Phase 5 onward depends on Phases 2 and 3.
+Everything from Phase 5 onward depends on Phases 2, 3 and 4.
 
 ### Phase 2 notes: what was built and what was left out
 
@@ -708,6 +710,26 @@ Left out on purpose:
 - **Entity extraction is a dictionary** for the 14 assets and 8 countries, not NER. It misses companies outside the universe by design.
 - **A Redis-shared rate limiter.** The limiter is still per process. Tiingo prices and news share one budget within a worker process, but two worker processes each keep their own, so a burst could still hit Tiingo's limit; that surfaces as a recorded `ProviderRateLimited`, not silent loss.
 - **Live verification.** As in Phase 2, adapters were tested against payloads that follow the documented shapes, not live responses. The SEC `company_tickers.json` and `submissions` shapes and Tiingo's `/tiingo/news` fields are the most likely places to differ; parse failures are recorded as rejected rows so a mismatch is visible on the status page.
+
+### Phase 4 notes: what was built and what was left out
+
+Built: a scheduled job (`SCHEDULE_EVENTS_SECONDS`, default 600) that groups new, not-yet-clustered articles into events by rules, scores each event, links it to tracked assets and closes events with no new article for `EVENT_WINDOW_HOURS` (default 48); `GET /api/v1/events` with ticker, category, status and `as_of` filters, each event returned with the articles it was built from; and the Events page.
+
+Behaviour worth knowing:
+
+- **Clustering rule.** An article joins the best open event when they share a ticker (or, with no tickers on either side, the same category and a country), their headlines share at least two words and overlap by 30% or more (Jaccard), and their publication times are within the window. Filings never join or accept anything: each filing is its own event. Tickered and ticker-less items never mix.
+- **Score.** `importance` = category base (central bank 0.60, earnings 0.55, macro 0.50, geopolitics 0.45, filing 0.35, commodities and crypto 0.35, company 0.30, other 0.10) + 0.10 per extra outlet (max 3) + 0.05 per extra article (max 3), capped at 1. `confidence` = 0.7 × best source reliability + 0.15 per corroborating outlet (max 2). "Outlet" is the publisher Tiingo names in the payload, else the source key. The components are stored in `score_details`. These weights are starting judgements, not measured; Phase 8 replaces them with hit rates.
+- **Point in time.** Nothing in an event is visible before the article that created it is available, and `state_as_of` never includes later articles. A test builds an event from articles that arrive three hours apart and checks that the earlier view has one article and a lower score.
+- **Market-wide events** (Fed, macro, geopolitics) carry no tickers and so link to no asset. The Phase 5 context builder should include them by category and country, not through `event_assets`.
+- The job handles up to 2000 unclustered articles per run; a larger backlog is finished by the next runs.
+
+Left out on purpose:
+
+- **Embeddings and LLM clustering.** `method` and `method_version` exist so they can be added beside the rules and compared. Rules were enough for headline-level grouping and are fully explainable.
+- **Merging events.** Two events that later turn out to be the same story are not merged, and an article is never moved between events. Splitting a story across two events is the failure mode to watch on the first real data.
+- **Cross-source linking of ticker-less items.** Tiingo news arrives tagged with tickers and Fed items with none, so a Tiingo article about a Fed decision will not join the Fed event. Fixing that needs topic tags rather than tickers.
+- **Direction and impact.** No sentiment, no price-reaction measurement. Both belong to Phase 5 and Phase 8.
+- **Live verification.** As before, only fixture headlines and synthetic articles were used. The 0.30 threshold is unproven on real headlines.
 
 ### Future extension points (not in the MVP)
 

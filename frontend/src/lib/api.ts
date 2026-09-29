@@ -100,6 +100,33 @@ export type NewsSource = {
   terms_note: string;
 };
 
+export type EventArticle = {
+  id: string;
+  title: string;
+  publisher: string;
+  published_at: string;
+  available_at: string;
+  is_duplicate: boolean;
+};
+
+export type MarketEvent = {
+  id: string;
+  title: string;
+  summary: string;
+  category: string;
+  importance: string; // decimal string, 0 to 1
+  confidence: string;
+  horizon: string;
+  status: "open" | "closed";
+  countries: string[];
+  tickers: { symbol: string; relevance: string }[];
+  first_seen_at: string;
+  last_updated_at: string;
+  available_at: string;
+  articles: EventArticle[];
+  score_details: Record<string, unknown>;
+};
+
 export type ApiResult<T> =
   | { ok: true; data: T; httpStatus: number }
   | { ok: false; error: string; httpStatus: number | null };
@@ -163,5 +190,12 @@ export const api = {
     return getJson<NewsArticle[]>(`/api/v1/news/articles?${q}`);
   },
   newsSources: () => getJson<NewsSource[]>("/api/v1/news/sources"),
+  events: (params: { ticker?: string; category?: string; status?: string } = {}) => {
+    const q = new URLSearchParams({ limit: "50" });
+    if (params.ticker) q.set("ticker", params.ticker);
+    if (params.category) q.set("category", params.category);
+    if (params.status) q.set("status", params.status);
+    return getJson<MarketEvent[]>(`/api/v1/events?${q}`);
+  },
   recentRuns: (limit = 20) => getJson<SystemRun[]>(`/api/v1/system/runs?limit=${limit}`),
 };
