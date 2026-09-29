@@ -63,6 +63,10 @@ celery_app.conf.update(
             "task": "marketos.reconcile",
             "schedule": float(settings.schedule_reconcile_seconds),
         },
+        "health_check": {
+            "task": "marketos.health_check",
+            "schedule": float(settings.schedule_health_seconds),
+        },
         "compute_indicators": {
             "task": "marketos.compute_indicators",
             "schedule": float(settings.schedule_indicators_seconds),

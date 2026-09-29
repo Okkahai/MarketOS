@@ -665,7 +665,7 @@ Each phase ends with passing tests, a PR, and an update to this document if a de
 | **7. Dashboard** (done) | overview, portfolio, trades, journal, asset detail | signal trace endpoint and the pages listed in the product brief | every position explainable in two clicks |
 | **8. Analytics** (done) | snapshots, evaluations, metrics, benchmarks | `portfolio_snapshots`, `performance_evaluations`, analytics page | metric tests against hand-computed fixtures |
 | **9. Backtesting** (done) | replay clock, historical runs | `ReplayClock`, backtest runner, isolated portfolios | chronology tests: no row read with `available_at > clock` |
-| **10. Hardening** | resilience and ops | provider fallback, monitoring page, alerting, security review, load of 6 months of history | failure-injection tests |
+| **10. Hardening** (done, partly) | resilience and ops | provider fallback, monitoring page, alerting, security review, load of 6 months of history | failure-injection tests |
 
 Everything from Phase 5 onward depends on Phases 2, 3 and 4.
 
@@ -832,6 +832,20 @@ Left out on purpose:
 - **News history.** A backtest can only replay news that was collected; a window with little stored news gives few signals. There is no historical news backfill.
 - **Parameter sweeps, walk-forward splits and overfitting checks.** One run is one window and one configuration; comparing runs is manual.
 - **Costs beyond the live model:** the same slippage and fees, no market impact or borrow.
+
+### Phase 10 notes: what was built and what was left out
+
+- **Monitoring** (`app/monitor.py`, `GET /api/v1/system/health`, an Alerts card on the System status page): derived only from `system_runs` and `provider_failures`. Alerts: a job never ran, its last run failed (a failed `reconcile` is `critical`), no success for three scheduled intervals (stale), a run stuck in `running` for over an hour (a dead worker), and provider failures in the last 24 hours.
+- **Alerting**: the `health_check` job (every `SCHEDULE_HEALTH_SECONDS`, default 300) logs each open alert at ERROR, so log-based alerting can match on `alert <code> <subject>`. No email, chat or push notifier is wired in, because none was chosen.
+- **Security review** (checked, no vulnerabilities found): the API is GET-only with no auth because it is bound to localhost and exposes no write path or secret; secrets are `SecretStr` from the environment; SQL goes through SQLAlchemy with bound parameters; feed URLs are limited to http(s) at ingest and again in the UI; article text is rendered escaped, never as HTML; scraped text reaches the analyst only as data. Added `nosniff`, `X-Frame-Options: DENY` and `Referrer-Policy: no-referrer` headers on both the API and the web app.
+- **Failure-injection tests** (`tests/integration/test_monitor.py`): a job that raises, a stale job, a run left `running` by a dead worker, a provider failure and an empty database all produce alerts; a healthy set produces none.
+
+Left out on purpose:
+
+- **Provider fallback** (Alpha Vantage for stocks, CoinGecko for crypto). Both need their own keys and their adapters could only be checked against mocks here; a wrong fallback would silently mix price sources into a database whose point-in-time rules depend on one. A missing feed is recorded and alerted instead.
+- **Auth on the API and a Redis-shared rate limiter.** Not needed while everything is bound to `127.0.0.1` and single-user; both are required before exposing the app.
+- **The 6-month history load test.** History is only what the providers return for the free keys, and the live keys have not been used yet.
+- **Auto-healing stuck runs.** They are reported, not rewritten, since `system_runs` is an audit trail.
 
 ### Future extension points (not in the MVP)
 
