@@ -14,7 +14,8 @@ The full design, including the database schema, provider choices, accounting rul
 | 2 | Market data (Tiingo stocks, Coinbase crypto), indicators, Market and asset pages | done, needs live verification with a Tiingo key |
 | 3 | News (Tiingo News, SEC EDGAR, Fed RSS), dedup, News feed page | done, needs live verification with `TIINGO_API_KEY` and `SEC_USER_AGENT` |
 | 4 | Events: rule-based clustering, scoring, asset linking, Events page | done, threshold unproven on real headlines |
-| 5–10 | AI analysis, paper trading, dashboard, analytics, backtesting, hardening | planned |
+| 5 | AI analysis: context builder, triage + analysis models, validated signals journal, cost budget, AI journal page | done, needs a live run with `ANTHROPIC_API_KEY` and `AI_MODEL_PRICES` |
+| 6–10 | Paper trading, dashboard, analytics, backtesting, hardening | planned |
 
 ## Run with Docker
 
@@ -25,7 +26,7 @@ docker compose up --build
 
 | Service | URL |
 |---|---|
-| Web (system status, market, asset, news, events pages) | http://localhost:3000 |
+| Web (system status, market, asset, news, events, AI journal pages) | http://localhost:3000 |
 | API docs | http://localhost:8000/docs |
 | Readiness | http://localhost:8000/health/ready |
 

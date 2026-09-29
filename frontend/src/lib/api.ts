@@ -127,6 +127,58 @@ export type MarketEvent = {
   score_details: Record<string, unknown>;
 };
 
+export type Signal = {
+  id: string;
+  analysis_id: string;
+  symbol: string;
+  generated_at: string;
+  action: "STRONG_BUY" | "BUY" | "HOLD" | "REDUCE" | "SELL" | "AVOID";
+  direction: "long" | "flat" | "exit";
+  confidence: string;
+  time_horizon: string;
+  reference_price: string;
+  reference_price_ts: string;
+  thesis: string;
+  bull_case: string;
+  bear_case: string;
+  key_catalysts: string[];
+  risks: string[];
+  invalidation_conditions: string[];
+  evidence: { source_article_id: string; quote_or_fact: string }[];
+  suggested_position_size_pct: string | null;
+  suggested_stop_loss_pct: string | null;
+  suggested_take_profit_pct: string | null;
+  event_id: string;
+  event_title: string;
+};
+
+export type Analysis = {
+  id: string;
+  event_id: string;
+  event_title: string;
+  stage: "triage" | "analysis";
+  as_of: string;
+  model: string;
+  model_version: string | null;
+  prompt_version: string;
+  validation_status: "valid" | "invalid" | "refused" | "error";
+  validation_errors: string[] | null;
+  input_tokens: number;
+  output_tokens: number;
+  estimated_cost_usd: string;
+  latency_ms: number;
+};
+
+export type AiUsage = {
+  day: string;
+  spent_usd: string;
+  budget_usd: string;
+  calls: number;
+  failed_calls: number;
+  input_tokens: number;
+  output_tokens: number;
+};
+
 export type ApiResult<T> =
   | { ok: true; data: T; httpStatus: number }
   | { ok: false; error: string; httpStatus: number | null };
@@ -197,5 +249,13 @@ export const api = {
     if (params.status) q.set("status", params.status);
     return getJson<MarketEvent[]>(`/api/v1/events?${q}`);
   },
+  signals: (params: { symbol?: string; action?: string } = {}) => {
+    const q = new URLSearchParams({ limit: "50" });
+    if (params.symbol) q.set("symbol", params.symbol);
+    if (params.action) q.set("action", params.action);
+    return getJson<Signal[]>(`/api/v1/signals?${q}`);
+  },
+  analyses: (limit = 30) => getJson<Analysis[]>(`/api/v1/ai/analyses?limit=${limit}`),
+  aiUsage: () => getJson<AiUsage>("/api/v1/ai/usage"),
   recentRuns: (limit = 20) => getJson<SystemRun[]>(`/api/v1/system/runs?limit=${limit}`),
 };

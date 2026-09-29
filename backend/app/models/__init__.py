@@ -1,3 +1,4 @@
+from app.models.ai import AiAnalysis, ContextSnapshot, Signal
 from app.models.asset import Asset
 from app.models.event import Event, EventAsset, EventSource
 from app.models.indicator_value import IndicatorValue
@@ -7,6 +8,7 @@ from app.models.provider_failure import ProviderFailure
 from app.models.system_run import SystemRun
 
 __all__ = [
-    "Asset", "Event", "EventAsset", "EventSource", "IndicatorValue", "MarketPrice",
-    "NewsArticle", "NewsSource", "ProviderFailure", "SystemRun",
+    "AiAnalysis", "Asset", "ContextSnapshot", "Event", "EventAsset", "EventSource",
+    "IndicatorValue", "MarketPrice", "NewsArticle", "NewsSource", "ProviderFailure", "Signal",
+    "SystemRun",
 ]  # fmt: skip

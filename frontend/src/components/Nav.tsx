@@ -10,7 +10,7 @@ const NAV: { label: string; href?: string; phase?: number }[] = [
   { label: "Market", href: "/market" },
   { label: "Portfolio", phase: 6 },
   { label: "Trades", phase: 6 },
-  { label: "AI journal", phase: 5 },
+  { label: "AI journal", href: "/journal" },
   { label: "Analytics", phase: 8 },
 ];
 

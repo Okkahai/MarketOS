@@ -47,6 +47,10 @@ celery_app.conf.update(
             "task": "marketos.cluster_events",
             "schedule": float(settings.schedule_events_seconds),
         },
+        "ai_analysis": {
+            "task": "marketos.ai_analysis",
+            "schedule": float(settings.schedule_ai_seconds),
+        },
         "compute_indicators": {
             "task": "marketos.compute_indicators",
             "schedule": float(settings.schedule_indicators_seconds),
