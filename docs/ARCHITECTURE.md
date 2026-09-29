@@ -283,19 +283,17 @@ Unique `(asset_id, interval, ts, provider, revision)`. Index `(asset_id, interva
 | external_id | text | provider id if any |
 | url, canonical_url | text | |
 | title, summary | text | summary is provider-supplied or extractive, not LLM by default |
-| body_excerpt | text null | stored only where terms allow |
 | published_at, collected_at, available_at | timestamptz | |
 | category | enum | `company`, `earnings`, `central_bank`, `filing`, `macro`, `commodities`, `geopolitics`, `crypto`, `other` |
 | countries, companies, tickers | text[] | extracted deterministically first |
-| language | text | |
-| content_hash | text | sha256 of normalized title+body |
-| simhash | bigint | near-duplicate detection |
-| duplicate_of_id | fk self null | set on insert when a duplicate is found |
+| title_norm | text | lowercased words of the title; what dedup compares |
+| content_hash | text | sha256 of `title_norm` |
+| duplicate_of_id, dedup_reason | fk self null, text null | set on insert when a copy is found (`same_url`, `same_title`, `similar_title`); the row is kept |
 | sentiment, importance | numeric null | null until computed; never defaulted |
 | raw_payload | jsonb | original provider payload, for audit |
 | run_id | fk | |
 
-Unique `(source_id, external_id)` and unique `canonical_url` where not null.
+Unique `(source_id, external_id)` and unique `(source_id, canonical_url)`. Check constraints: `available_at >= collected_at`, and a `dedup_reason` needs a `duplicate_of_id`. `body_excerpt`, `language` and `simhash` from the first design were dropped: no source supplies a body we may store, all three sources are English, and title Jaccard was enough (see Phase 3 notes).
 
 **events**
 
@@ -658,7 +656,7 @@ Each phase ends with passing tests, a PR, and an update to this document if a de
 |---|---|---|---|
 | **1. Foundation** | Repo, backend, frontend, Postgres, Redis, Docker, config, health | FastAPI app with `/health/live` and `/health/ready` (checks DB and Redis), settings via env with validation, structured JSON logging, Alembic baseline with `system_runs`, Celery worker + beat skeleton, Next.js shell with navigation and a live system status page, CI | `docker compose up` brings every service to healthy; tests pass in CI |
 | **2. Market data** (done) | Tiingo + Coinbase adapters, assets, bars, indicators | provider base (retry, rate limit, failure recording), `assets`, `market_prices`, `indicator_values`, `provider_failures`, seed of the 14 assets, market page and price chart | bars stored with correct `available_at`; indicator tests against known values |
-| **3. News** | Tiingo News, SEC EDGAR, Fed RSS | normalization, `content_hash` + simhash dedup, ticker extraction, news page | dedup and timestamp tests |
+| **3. News** (done) | Tiingo News, SEC EDGAR, Fed RSS | normalization, `content_hash` + title-similarity dedup, ticker extraction, news page | dedup and timestamp tests |
 | **4. Events** | clustering, scoring, asset linking | `events`, `event_sources`, `event_assets`, events page | clustering tests on fixture articles |
 | **5. AI analysis** | context builder, LLM client, schemas | `context_snapshots`, `ai_analyses`, `signals`, triage + main model, cost tracking, cache | lookahead test on snapshots; schema rejection tests |
 | **6. Paper trading** | risk engine, fills, ledger, positions | `risk_decisions`, `trades`, `cash_ledger`, `positions`, immutability triggers, reconciliation | accounting, sizing and risk-rule tests |
@@ -667,7 +665,7 @@ Each phase ends with passing tests, a PR, and an update to this document if a de
 | **9. Backtesting** | replay clock, historical runs | `ReplayClock`, backtest runner, isolated portfolios | chronology tests: no row read with `available_at > clock` |
 | **10. Hardening** | resilience and ops | provider fallback, monitoring page, alerting, security review, load of 6 months of history | failure-injection tests |
 
-Phases 2 and 3 are independent and could run in parallel; everything from Phase 5 onward depends on both.
+Everything from Phase 5 onward depends on Phases 2 and 3.
 
 ### Phase 2 notes: what was built and what was left out
 
@@ -688,6 +686,28 @@ Left out on purpose, with the phase that should pick each up:
 - **The rate limiter is per process.** If several workers ever share a provider, move the window into Redis.
 - **HTTP response caching.** Ingestion is idempotent and stays far under the free-tier limits, so it was skipped.
 - **Live verification.** This build environment cannot reach the providers, so the adapters were tested against mocked responses that follow the providers' documented shapes, not recorded live responses. The first run against real endpoints may reveal differences; the failure paths above are designed to make that visible rather than silent.
+
+### Phase 3 notes: what was built and what was left out
+
+Built: three source adapters (Tiingo News by tracked ticker, SEC EDGAR 8-K/10-K/10-Q per company, Federal Reserve press and speech RSS) that all produce one `RawArticle`; a normaliser that cleans text, canonicalises URLs, extracts tickers, companies and countries, assigns a rule-based category and sets the three timestamps; a store that marks duplicates instead of dropping them; one scheduled job per source (`SCHEDULE_NEWS_SECONDS`, default 900) with the same run and failure recording as market data; `GET /api/v1/news/articles` and `/sources`; and the News feed page.
+
+Behaviour worth knowing:
+
+- `published_at` is the source's claim (for a filing, SEC's `acceptanceDateTime`). `available_at` is the later of `published_at` and our `collected_at`, so a backfilled item is never visible to a decision made before we had it. `GET /news/articles?as_of=` applies that rule. Items dated more than 10 minutes in the future or without a timezone are rejected.
+- Duplicates are stored and point at the first copy we collected. Two articles are duplicates when their canonical URL matches, their normalised titles match (3+ words), or their title word sets overlap by 80% or more (5+ words each), within `NEWS_DEDUP_WINDOW_HOURS` (default 48). Paraphrases of one event are deliberately not merged; grouping those is the events layer (Phase 4). Filings are compared by URL only, because two 8-Ks from one company can share a title.
+- Feed text is untrusted: HTML removed, control characters and NUL stripped, lengths capped, non-http(s) links rejected, XML parsed with `defusedxml` (entity bombs and external entities refused). The UI re-checks links and opens them with `noopener noreferrer nofollow`. Article text is data and never reaches a prompt except through the Phase 5 context builder.
+- Missing credentials give a `skipped` run (`TIINGO_API_KEY` for news, `SEC_USER_AGENT` for filings; the Fed feeds need none). A failed call is a `provider_failures` row and stores nothing. One company failing does not hide the others (`partial`), and an auth or rate-limit error stops the source.
+- `sentiment` and `importance` stay null. Phase 5 fills them.
+
+Left out on purpose:
+
+- **Simhash.** Title Jaccard over a 48-hour window is exact, explainable and cheap at MVP volume. Revisit if body text is ever stored.
+- **Article bodies.** Not fetched or stored: terms vary and headlines plus summaries are enough for triage. The `url` is kept for the reader.
+- **Crypto news coverage.** Tiingo news is queried for stock and ETF tickers only. Whether Tiingo tags `btcusd` and `ethusd` on the free plan is unverified, so crypto headlines currently arrive only when they mention a tracked stock or when a Fed item is classed as crypto by keyword.
+- **Other SEC forms.** Form 4, 13F and the rest are skipped as noise. Only companies with a stock asset in the universe are queried; the ticker-to-CIK map is fetched from SEC's `company_tickers.json` and cached for a day.
+- **Entity extraction is a dictionary** for the 14 assets and 8 countries, not NER. It misses companies outside the universe by design.
+- **A Redis-shared rate limiter.** The limiter is still per process. Tiingo prices and news share one budget within a worker process, but two worker processes each keep their own, so a burst could still hit Tiingo's limit; that surfaces as a recorded `ProviderRateLimited`, not silent loss.
+- **Live verification.** As in Phase 2, adapters were tested against payloads that follow the documented shapes, not live responses. The SEC `company_tickers.json` and `submissions` shapes and Tiingo's `/tiingo/news` fields are the most likely places to differ; parse failures are recorded as rejected rows so a mismatch is visible on the status page.
 
 ### Future extension points (not in the MVP)
 

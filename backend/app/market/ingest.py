@@ -18,8 +18,9 @@ from app.core.config import Settings
 from app.jobs.runner import JobContext, run_job
 from app.market.bars import INTERVAL_DELTA, FetchResult
 from app.market.repository import StoreStats, latest_stored_ts, store_bars
-from app.models import Asset, ProviderFailure
+from app.models import Asset
 from app.providers.base import ProviderAuthError, ProviderError, ProviderRateLimited
+from app.providers.failures import record_failure, record_rejections
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +119,7 @@ def _ingest_assets(
             session.rollback()
             failed += 1
             outcomes[asset.symbol] = {"error": f"{type(exc).__name__}: {exc}"}
-            _record_failure(session, ctx.run_id, provider, asset.symbol, exc, now)
+            record_failure(session, ctx.run_id, provider, asset.symbol, exc, now)
             logger.warning(
                 "provider call failed",
                 extra={"provider": provider, "symbol": asset.symbol, "error": str(exc)},
@@ -133,7 +134,9 @@ def _ingest_assets(
         stored += stats.written + stats.revisions
         outcomes[asset.symbol] = asdict(_outcome(result, stats))
         if result.rejected:
-            _record_rejections(session, ctx.run_id, provider, asset.symbol, result, now)
+            record_rejections(
+                session, ctx.run_id, provider, asset.symbol, result.rejected, now, what="bars"
+            )
 
     ctx.items_fetched = fetched
     ctx.items_written = stored
@@ -152,50 +155,3 @@ def _outcome(result: FetchResult, stats: StoreStats) -> AssetOutcome:
         unchanged=stats.unchanged, not_yet_available=stats.not_yet_available,
         rejected=len(result.rejected),
     )  # fmt: skip
-
-
-def _record_failure(
-    session: Session,
-    run_id: uuid.UUID,
-    provider: str,
-    symbol: str,
-    exc: ProviderError,
-    now: datetime,
-) -> None:
-    session.add(
-        ProviderFailure(
-            run_id=run_id,
-            provider=provider,
-            endpoint=exc.endpoint or "unknown",
-            subject=symbol,
-            http_status=exc.http_status,
-            error_type=type(exc).__name__,
-            error=str(exc)[:2000],
-            retry_count=exc.retry_count,
-            occurred_at=now,
-        )  # fmt: skip
-    )
-    session.commit()
-
-
-def _record_rejections(
-    session: Session,
-    run_id: uuid.UUID,
-    provider: str,
-    symbol: str,
-    result: FetchResult,
-    now: datetime,
-) -> None:
-    first = result.rejected[0]
-    session.add(
-        ProviderFailure(
-            run_id=run_id,
-            provider=provider,
-            endpoint="bar validation",
-            subject=symbol,
-            error_type="RejectedBars",
-            occurred_at=now,
-            error=f"{len(result.rejected)} rows rejected. First: {first.reason} | {first.raw}",
-        )  # fmt: skip
-    )
-    session.commit()

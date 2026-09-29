@@ -3,7 +3,7 @@
 from functools import lru_cache
 
 from app.core.config import Settings
-from app.providers import coinbase, tiingo
+from app.providers import coinbase, fed, sec, tiingo
 from app.providers.base import HttpJsonClient, RateLimiter
 
 
@@ -39,3 +39,32 @@ def build_coinbase(settings: Settings) -> coinbase.CoinbaseProvider:
         max_retries=settings.provider_max_retries,
     )
     return coinbase.CoinbaseProvider(http)
+
+
+def build_sec(settings: Settings) -> sec.SecProvider | None:
+    if settings.sec_user_agent is None:
+        return None
+    headers = {"User-Agent": settings.sec_user_agent}
+    # SEC allows 10 requests/second; stay at half of that. Both hosts count as one client.
+    limiter = _limiter("sec_edgar", 5, 1.0, 5.0)
+    kwargs = {
+        "headers": headers,
+        "limiter": limiter,
+        "timeout": settings.provider_http_timeout_seconds,
+        "max_retries": settings.provider_max_retries,
+    }
+    return sec.SecProvider(
+        HttpJsonClient("sec_edgar", sec.WWW_URL, **kwargs),
+        HttpJsonClient("sec_edgar", sec.DATA_URL, **kwargs),
+    )
+
+
+def build_fed(settings: Settings) -> HttpJsonClient:
+    return HttpJsonClient(
+        "fed_rss",
+        fed.BASE_URL,
+        headers={"User-Agent": fed.USER_AGENT},
+        limiter=_limiter("fed_rss", 2, 1.0, 5.0),
+        timeout=settings.provider_http_timeout_seconds,
+        max_retries=settings.provider_max_retries,
+    )

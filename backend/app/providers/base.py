@@ -113,12 +113,21 @@ class HttpJsonClient:
     def get_json(self, path: str, params: Mapping[str, Any] | None = None) -> Any:
         """GET and parse JSON. Floats become Decimal so prices never pass through binary floats."""
         try:
-            return self._get_json(path, params)
+            response, attempt = self._request(path, params)
+            return _parse(response, self.provider, attempt)
         except ProviderError as exc:
-            exc.endpoint = path
+            exc.endpoint = exc.endpoint or _endpoint(path)
             raise
 
-    def _get_json(self, path: str, params: Mapping[str, Any] | None) -> Any:
+    def get_text(self, path: str, params: Mapping[str, Any] | None = None) -> str:
+        """GET a text body (RSS/XML). Same retries and errors as get_json."""
+        try:
+            return self._request(path, params)[0].text
+        except ProviderError as exc:
+            exc.endpoint = exc.endpoint or _endpoint(path)
+            raise
+
+    def _request(self, path: str, params: Mapping[str, Any] | None) -> tuple[httpx.Response, int]:
         last_error: ProviderError | None = None
         for attempt in range(self.max_retries + 1):
             if self._limiter:
@@ -134,7 +143,7 @@ class HttpJsonClient:
 
             status = response.status_code
             if status == 200:
-                return _parse(response, self.provider, attempt)
+                return response, attempt
             if status in (401, 403):
                 raise ProviderAuthError(
                     f"{self.provider} rejected the credentials",
@@ -179,6 +188,11 @@ class HttpJsonClient:
 
     def close(self) -> None:
         self._client.close()
+
+
+def _endpoint(path: str) -> str:
+    """Path without query string or fragment, so keys in URLs can never reach the failure log."""
+    return path.split("?", 1)[0].split("#", 1)[0][:300]
 
 
 def _parse(response: httpx.Response, provider: str, attempt: int) -> Any:

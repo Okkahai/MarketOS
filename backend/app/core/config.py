@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     schedule_crypto_daily_seconds: int = Field(default=3600, ge=60)
     schedule_crypto_1m_seconds: int = Field(default=60, ge=30)
     schedule_indicators_seconds: int = Field(default=3600, ge=60)
+    schedule_news_seconds: int = Field(default=900, ge=60)
 
     # Market data collection
     market_history_days: int = Field(default=400, ge=30, le=3650)
@@ -48,6 +49,10 @@ class Settings(BaseSettings):
     provider_http_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
     provider_max_retries: int = Field(default=3, ge=0, le=6)
     # Below Tiingo's published free-tier limit of 50/hour, to absorb window edges.
+    # News collection
+    news_backfill_days: int = Field(default=3, ge=1, le=90)
+    # Articles further apart than this are never treated as duplicates of each other.
+    news_dedup_window_hours: int = Field(default=48, ge=1, le=336)
     tiingo_max_requests_per_hour: int = Field(default=40, ge=1)
 
     tiingo_api_key: SecretStr | None = None

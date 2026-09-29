@@ -31,6 +31,18 @@ celery_app.conf.update(
             "task": "marketos.ingest_crypto_1m",
             "schedule": float(settings.schedule_crypto_1m_seconds),
         },
+        "ingest_news_tiingo": {
+            "task": "marketos.ingest_news_tiingo",
+            "schedule": float(settings.schedule_news_seconds),
+        },
+        "ingest_news_sec": {
+            "task": "marketos.ingest_news_sec",
+            "schedule": float(settings.schedule_news_seconds),
+        },
+        "ingest_news_fed": {
+            "task": "marketos.ingest_news_fed",
+            "schedule": float(settings.schedule_news_seconds),
+        },
         "compute_indicators": {
             "task": "marketos.compute_indicators",
             "schedule": float(settings.schedule_indicators_seconds),

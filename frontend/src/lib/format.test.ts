@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatMoneyString, formatUtc } from "./format";
+import { formatMoneyString, formatUtc, safeHttpUrl } from "./format";
 
 describe("formatMoneyString", () => {
   it("groups thousands and keeps exact cents", () => {
@@ -64,5 +64,14 @@ describe("percent and direction", () => {
   it("formats dates in UTC", () => {
     expect(formatUtcDate("2026-09-25T23:30:00-05:00")).toBe("2026-09-26");
     expect(formatUtcDate(null)).toBe("—");
+  });
+});
+
+describe("safeHttpUrl", () => {
+  it("allows http and https only", () => {
+    expect(safeHttpUrl("https://example.com/a?b=1")).toBe("https://example.com/a?b=1");
+    expect(safeHttpUrl("javascript:alert(1)")).toBeNull();
+    expect(safeHttpUrl("data:text/html,x")).toBeNull();
+    expect(safeHttpUrl("not a url")).toBeNull();
   });
 });
