@@ -163,14 +163,22 @@ def get_portfolio(session: Db) -> PortfolioOut:
 
 
 @router.get("/trades", response_model=list[TradeOut])
-def list_trades(session: Db, limit: Limit = 50, offset: Annotated[int, Query(ge=0)] = 0):
-    rows = session.execute(
+def list_trades(
+    session: Db,
+    symbol: Annotated[str | None, Query(max_length=32)] = None,
+    limit: Limit = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+):
+    q = (
         select(Trade, Asset.symbol)
         .join(Asset, Asset.id == Trade.asset_id)
         .order_by(Trade.seq.desc())
         .limit(limit)
         .offset(offset)
     )
+    if symbol:
+        q = q.where(Asset.symbol == symbol.upper())
+    rows = session.execute(q)
     return [
         TradeOut(
             id=str(t.id),

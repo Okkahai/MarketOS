@@ -59,6 +59,7 @@ function TradeTable({ trades }: { trades: Trade[] }) {
             <th className="num">Price (after slippage)</th>
             <th className="num">Fee</th>
             <th className="num">Realised P&amp;L</th>
+            <th>Why</th>
           </tr>
         </thead>
         <tbody>
@@ -76,6 +77,9 @@ function TradeTable({ trades }: { trades: Trade[] }) {
               </td>
               <td className="num">{formatDecimalString(t.fee, 2, 4)}</td>
               <td className="num">{t.side === "SELL" ? formatDecimalString(t.realized_pnl, 2, 2) : "—"}</td>
+              <td>
+                <Link href={`/signals/${t.signal_id}`}>Trace</Link>
+              </td>
             </tr>
           ))}
         </tbody>
@@ -113,6 +117,9 @@ function DecisionList({ decisions }: { decisions: RiskDecision[] }) {
                 ))}
               </ul>
             ) : null}
+            <p>
+              <Link href={`/signals/${d.signal_id}`}>Full trace</Link>
+            </p>
             <details>
               <summary>All {d.rules_evaluated.length} rules checked</summary>
               <ul>

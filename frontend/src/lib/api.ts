@@ -254,6 +254,42 @@ export type PaperOrder = {
   signal_id: string;
 };
 
+export type Trace = {
+  signal: {
+    id: string;
+    symbol: string;
+    action: string;
+    confidence: string;
+    time_horizon: string;
+    generated_at: string;
+    reference_price: string;
+    reference_price_ts: string;
+    thesis: string;
+    bull_case: string;
+    bear_case: string;
+    risks: string[];
+    invalidation_conditions: string[];
+    key_catalysts: string[];
+    evidence: { quote_or_fact: string }[];
+  };
+  event: { id: string; title: string; category: string; importance: string; first_seen_at: string };
+  articles: { id: string; source: string; title: string; published_at: string; is_copy: boolean }[];
+  asset_context: Record<string, unknown> | null;
+  analysis: {
+    id: string;
+    model: string;
+    model_version: string | null;
+    prompt_version: string;
+    as_of: string;
+    context_sha256: string;
+  };
+  portfolio_context: Record<string, unknown> | null;
+  decision: RiskDecision | null;
+  orders: PaperOrder[];
+  trades: Trade[];
+  position: PortfolioPosition | null;
+};
+
 export type ApiResult<T> =
   | { ok: true; data: T; httpStatus: number }
   | { ok: false; error: string; httpStatus: number | null };
@@ -333,7 +369,12 @@ export const api = {
   analyses: (limit = 30) => getJson<Analysis[]>(`/api/v1/ai/analyses?limit=${limit}`),
   aiUsage: () => getJson<AiUsage>("/api/v1/ai/usage"),
   portfolio: () => getJson<Portfolio>("/api/v1/portfolio"),
-  trades: (limit = 100) => getJson<Trade[]>(`/api/v1/trades?limit=${limit}`),
+  trades: (limit = 100, symbol?: string) =>
+    getJson<Trade[]>(
+      `/api/v1/trades?limit=${limit}${symbol ? `&symbol=${encodeURIComponent(symbol)}` : ""}`,
+    ),
+  trace: (signalId: string) =>
+    getJson<Trace>(`/api/v1/signals/${encodeURIComponent(signalId)}/trace`),
   riskDecisions: (decision?: string) =>
     getJson<RiskDecision[]>(
       `/api/v1/risk-decisions?limit=100${decision ? `&decision=${encodeURIComponent(decision)}` : ""}`,
