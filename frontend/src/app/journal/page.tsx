@@ -65,9 +65,10 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
         <div className="card">
           <p>No recommendations yet.</p>
           <p className="muted">
-            The analysis job needs <code>ANTHROPIC_API_KEY</code> and a price for each model in{" "}
-            <code>AI_MODEL_PRICES</code>, and only looks at events with importance above the
-            configured minimum. <Link href="/">System status</Link> shows why a run was skipped.
+            The analysis job only looks at events with importance above the configured minimum
+            and, by default, reads them with the free rules analyst (<code>AI_PROVIDER=rules</code>).
+            Using Claude instead needs <code>ANTHROPIC_API_KEY</code> and{" "}
+            <code>AI_MODEL_PRICES</code>. <Link href="/">System status</Link> shows why a run was skipped.
           </p>
         </div>
       ) : (

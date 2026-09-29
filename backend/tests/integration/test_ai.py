@@ -39,8 +39,8 @@ PRICES = {
 
 
 def settings(**kw) -> Settings:
-    base = dict(ai_triage_model="cheap", ai_analysis_model="smart", ai_model_prices=PRICES,
-                ai_daily_budget_usd=D("5"))  # fmt: skip
+    base = dict(ai_provider="anthropic", ai_triage_model="cheap", ai_analysis_model="smart",
+                ai_model_prices=PRICES, ai_daily_budget_usd=D("5"))  # fmt: skip
     return Settings(**{**base, **kw})
 
 

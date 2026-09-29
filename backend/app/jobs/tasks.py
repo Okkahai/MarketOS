@@ -10,9 +10,9 @@ from app.market.ingest import run_ingest
 from app.news.ingest import run_news_source, tracked_symbols
 from app.providers import fed
 from app.providers.registry import (
-    build_anthropic,
     build_coinbase,
     build_fed,
+    build_llm,
     build_sec,
     build_tiingo,
 )
@@ -152,7 +152,7 @@ def cluster_events() -> str:
 @celery_app.task(name="marketos.ai_analysis")
 def ai_analysis() -> str:
     settings = get_settings()
-    return str(run_ai_analysis(get_session_factory(), settings, build_anthropic(settings)))
+    return str(run_ai_analysis(get_session_factory(), settings, build_llm(settings)))
 
 
 @celery_app.task(name="marketos.paper_cycle")

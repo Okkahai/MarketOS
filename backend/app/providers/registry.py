@@ -3,7 +3,8 @@
 from functools import lru_cache
 
 from app.ai import llm
-from app.ai.llm import AnthropicClient
+from app.ai.llm import AnthropicClient, LlmClient
+from app.ai.rules_llm import RulesClient
 from app.core.config import Settings
 from app.providers import coinbase, fed, sec, tiingo
 from app.providers.base import HttpJsonClient, RateLimiter
@@ -87,3 +88,10 @@ def build_anthropic(settings: Settings) -> AnthropicClient | None:
         max_retries=settings.provider_max_retries,
     )
     return llm.AnthropicClient(http)
+
+
+def build_llm(settings: Settings) -> LlmClient | None:
+    """The analyst the AI job uses: the free rules analyst by default, Claude if configured."""
+    if settings.ai_provider == "rules":
+        return RulesClient()
+    return build_anthropic(settings)
