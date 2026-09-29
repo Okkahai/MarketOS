@@ -1,0 +1,101 @@
+# MarketOS local stack. Simulation only: no service here talks to a broker.
+#   cp .env.example .env && docker compose up --build
+# Ports bind to 127.0.0.1 so nothing is exposed beyond this machine.
+
+x-backend: &backend
+  build: ./backend
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-marketos}:${POSTGRES_PASSWORD:-marketos}@postgres:5432/${POSTGRES_DB:-marketos}
+    REDIS_URL: redis://redis:6379/0
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-marketos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-marketos}
+      POSTGRES_DB: ${POSTGRES_DB:-marketos}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    <<: *backend
+    command: ["sh", "-c", "alembic upgrade head && python -m app.market.seed"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *backend
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  worker:
+    <<: *backend
+    command: ["celery", "-A", "app.jobs.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.jobs.celery_app inspect ping -d celery@$$HOSTNAME --timeout 5"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  beat:
+    <<: *backend
+    command: ["celery", "-A", "app.jobs.celery_app", "beat", "--loglevel=INFO", "--schedule=/tmp/celerybeat-schedule"]
+    healthcheck:
+      disable: true
+    depends_on:
+      worker:
+        condition: service_started
+
+  web:
+    build: ./frontend
+    environment:
+      API_INTERNAL_URL: http://api:8000
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:
