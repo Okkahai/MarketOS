@@ -46,7 +46,7 @@ services:
 
   migrate:
     <<: *backend
-    command: ["alembic", "upgrade", "head"]
+    command: ["sh", "-c", "alembic upgrade head && python -m app.market.seed"]
     restart: "no"
     depends_on:
       postgres:

@@ -34,3 +34,5 @@ def configure_logging(level: str = "INFO", fmt: str = "json") -> None:
     root = logging.getLogger()
     root.handlers[:] = [handler]
     root.setLevel(level)
+    # httpx logs every request URL at INFO; provider calls are recorded in system_runs instead.
+    logging.getLogger("httpx").setLevel(logging.WARNING)

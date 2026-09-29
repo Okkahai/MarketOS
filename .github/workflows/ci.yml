@@ -88,6 +88,10 @@ jobs:
             sleep 3
           done
           grep -q "System status" page.html
+      - name: Migration seeded the 14-asset universe
+        run: |
+          test "$(curl -fsS http://127.0.0.1:8000/api/v1/market/watchlist | jq length)" = 14
+          curl -fsS http://127.0.0.1:3000/market | grep -q "BTC-USD"
       - name: Beat and worker record a heartbeat run
         run: |
           for i in $(seq 1 40); do

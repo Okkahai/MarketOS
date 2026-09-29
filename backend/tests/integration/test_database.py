@@ -5,14 +5,14 @@ from datetime import UTC, datetime
 
 import pytest
 from alembic import command
-from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, inspect, select
+from sqlalchemy import inspect, select
 from sqlalchemy.orm import sessionmaker
 
 from app.core.clock import FixedClock
 from app.jobs.runner import run_job
 from app.models import SystemRun
+from tests.integration.conftest import alembic_config
 
 DB_URL = os.environ.get("TEST_DATABASE_URL")
 REDIS_URL = os.environ.get("TEST_REDIS_URL")
@@ -22,32 +22,12 @@ pytestmark = [
     pytest.mark.skipif(not DB_URL, reason="TEST_DATABASE_URL not set"),
 ]
 
-BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-
-
-def _alembic() -> Config:
-    cfg = Config(os.path.join(BACKEND_DIR, "alembic.ini"))
-    cfg.set_main_option("script_location", os.path.join(BACKEND_DIR, "alembic"))
-    cfg.set_main_option("sqlalchemy.url", DB_URL)
-    return cfg
-
-
-@pytest.fixture
-def migrated():
-    cfg = _alembic()
-    command.downgrade(cfg, "base")
-    command.upgrade(cfg, "head")
-    engine = create_engine(DB_URL)
-    yield engine
-    engine.dispose()
-    command.downgrade(cfg, "base")
-
 
 def test_migrations_round_trip(migrated):
     assert "system_runs" in inspect(migrated).get_table_names()
-    command.downgrade(_alembic(), "base")
+    command.downgrade(alembic_config(), "base")
     assert "system_runs" not in inspect(migrated).get_table_names()
-    command.upgrade(_alembic(), "head")
+    command.upgrade(alembic_config(), "head")
 
 
 def test_run_job_records_success(migrated):

@@ -4,7 +4,7 @@ MarketOS is an AI financial-intelligence and **paper trading** platform. It neve
 
 > Why did the system make this decision, and what happened afterward?
 
-Status: design baseline, written 2026-09-28. Phase 1 (foundation) is implemented alongside this document. Later phases will update the sections they touch.
+Status: design baseline, written 2026-09-28. Phases 1 (foundation) and 2 (market data) are implemented; sections they changed say so. Later phases will update the sections they touch.
 
 Contents
 
@@ -235,33 +235,41 @@ Only columns that carry meaning are listed; every table also has `id` (UUID v7, 
 
 | column | type | notes |
 |---|---|---|
-| symbol | text | unique per `asset_class` (`AAPL`, `BTC-USD`) |
-| asset_class | enum | `stock`, `crypto`; later `etf`, `index`, `fx`, `commodity`, `bond` |
+| symbol | text | globally unique (`AAPL`, `BTC-USD`; crypto pairs carry the quote currency so they cannot collide with a stock ticker) |
+| asset_class | text + check constraint | `stock`, `etf`, `crypto`; later `index`, `fx`, `commodity`, `bond` (a check constraint instead of a PostgreSQL enum, so adding a class is a simple migration) |
 | name, exchange, currency | text | |
 | sector, industry | text null | used by sector risk limits |
-| provider_symbols | jsonb | `{"tiingo": "aapl", "coinbase": "BTC-USD"}` |
-| is_active, is_benchmark | bool | benchmarks (SPY, QQQ) are assets too |
+| provider_symbols | jsonb | `{"tiingo": "AAPL"}` or `{"coinbase": "BTC-USD"}` |
+| is_active, is_benchmark | bool | benchmarks (SPY, QQQ, BTC-USD) are ordinary assets whose bars are collected the same way |
 
-**market_prices** (raw bars, never modified; a correction is a new row with higher `revision`)
+**market_prices** (raw bars, append-only; a correction is a new row with a higher `revision`). Implemented in Phase 2; the database rejects `UPDATE` and `DELETE` with a trigger.
 
 | column | type | notes |
 |---|---|---|
 | asset_id | fk | |
-| interval | enum | `1m`, `5m`, `1h`, `1d` |
-| ts | timestamptz | bar open |
-| open, high, low, close | numeric | |
+| interval | text + check | `1m`, `5m`, `1h`, `1d` |
+| ts | timestamptz | bar start. Stocks' daily bars are labelled with the trading date at 00:00 UTC (the provider gives a date, not an open time) |
+| open, high, low, close | numeric | check constraint: `low > 0`, `high >= low`, open and close inside the range |
 | adj_close | numeric null | provider adjusted close, stocks only |
 | volume | numeric | |
 | provider | text | |
-| available_at | timestamptz | bar close or later |
+| available_at | timestamptz | when the bar may be used (see below) |
 | revision | int | 0 for first observation |
 | run_id | fk system_runs | |
 
 Unique `(asset_id, interval, ts, provider, revision)`. Index `(asset_id, interval, available_at)`.
 
-**indicator_values** (derived, recomputable, separate from raw data)
+`available_at` rules (Phase 2):
 
-`asset_id, interval, ts, name (rsi_14, ema_20, atr_14, ...), value numeric, params jsonb, computed_from_available_at, code_version`. Never read by accounting.
+- Stock daily bar: 20:00 America/New_York on the trading date. Tiingo says most US prices are available at 5:30 PM ET and that exchanges may send corrections until 8 PM ET, so bars are used only after the corrections window. This is conservative on early-close days.
+- Crypto bar: bar close plus 5 seconds, because exchange candles can receive late trades just after the close.
+- A revision's `available_at` is the moment it was fetched (`max(now, nominal)`), because the corrected value was not knowable earlier.
+- A bar whose `available_at` is still in the future is never stored. This is what keeps in-progress candles and provisional end-of-day prints out.
+- `get_bars(as_of)` returns, per `ts`, the highest revision with `available_at <= as_of`.
+
+**indicator_values** (derived, recomputable, separate from raw data). Implemented in Phase 2.
+
+`asset_id, interval, ts, name (rsi_14, sma_50, atr_14, ...), value numeric, params jsonb, computed_from_available_at, code_version`. Unique `(asset_id, interval, ts, name, code_version)`, upserted. Never read by accounting. Only daily indicators are stored, and only the newest `INDICATOR_STORE_BARS` per asset. Decisions and backtests must compute indicators from `get_bars(as_of)` instead of reading this table, which is a dashboard cache.
 
 **news_sources**
 
@@ -389,7 +397,7 @@ Unique `(source_id, external_id)` and unique `canonical_url` where not null.
 
 `job_name, started_at, finished_at, status (running|succeeded|partial|failed|skipped), provider, items_fetched, items_written, error_type, error_message, details jsonb`.
 
-**provider_failures** `run_id, provider, endpoint, http_status, error, occurred_at, retry_count`. A failed fetch leaves a row here and nothing in the data tables.
+**provider_failures** `run_id, provider, endpoint (path only, never the query string), subject (e.g. the symbol), http_status, error_type, error, retry_count, occurred_at`. A failed fetch leaves a row here and nothing in the data tables. Bars rejected by validation are recorded here too, with `error_type = RejectedBars`. Implemented in Phase 2.
 
 ### Traceability chain
 
@@ -649,7 +657,7 @@ Each phase ends with passing tests, a PR, and an update to this document if a de
 | Phase | Scope | Key deliverables | Exit check |
 |---|---|---|---|
 | **1. Foundation** | Repo, backend, frontend, Postgres, Redis, Docker, config, health | FastAPI app with `/health/live` and `/health/ready` (checks DB and Redis), settings via env with validation, structured JSON logging, Alembic baseline with `system_runs`, Celery worker + beat skeleton, Next.js shell with navigation and a live system status page, CI | `docker compose up` brings every service to healthy; tests pass in CI |
-| **2. Market data** | Tiingo + Coinbase adapters, assets, bars, indicators | provider base class (retry, rate limit, cache, failure recording), `assets`, `market_prices`, `indicator_values`, seed of the 14 assets, market page and price chart | bars stored with correct `available_at`; indicator tests against known values |
+| **2. Market data** (done) | Tiingo + Coinbase adapters, assets, bars, indicators | provider base (retry, rate limit, failure recording), `assets`, `market_prices`, `indicator_values`, `provider_failures`, seed of the 14 assets, market page and price chart | bars stored with correct `available_at`; indicator tests against known values |
 | **3. News** | Tiingo News, SEC EDGAR, Fed RSS | normalization, `content_hash` + simhash dedup, ticker extraction, news page | dedup and timestamp tests |
 | **4. Events** | clustering, scoring, asset linking | `events`, `event_sources`, `event_assets`, events page | clustering tests on fixture articles |
 | **5. AI analysis** | context builder, LLM client, schemas | `context_snapshots`, `ai_analyses`, `signals`, triage + main model, cost tracking, cache | lookahead test on snapshots; schema rejection tests |
@@ -660,6 +668,26 @@ Each phase ends with passing tests, a PR, and an update to this document if a de
 | **10. Hardening** | resilience and ops | provider fallback, monitoring page, alerting, security review, load of 6 months of history | failure-injection tests |
 
 Phases 2 and 3 are independent and could run in parallel; everything from Phase 5 onward depends on both.
+
+### Phase 2 notes: what was built and what was left out
+
+Built: Tiingo daily stock bars and Coinbase candles (1d and 1m) behind one HTTP client with retries, exponential backoff, `Retry-After` handling, typed errors and a sliding-window rate limiter; the append-only `market_prices` table with revisions; the 14-asset seed (run by the compose `migrate` service); scheduled ingestion jobs that record every run; 19 indicators computed in pure Python (RSI matches StockCharts' published worked example, MACD is checked against a closed form); a read-only market API; and the Market and asset pages.
+
+Behaviour worth knowing:
+
+- A provider without credentials produces a `skipped` run with the reason. A provider that fails produces a `failed` or `partial` run plus `provider_failures` rows, and no bars. An authentication or rate-limit error stops the run instead of retrying every symbol.
+- Prices are parsed straight from JSON text into `Decimal` (`parse_float=Decimal`), so they never pass through a binary float.
+- Every run re-fetches a short overlap (`MARKET_OVERLAP_DAYS`, default 5) so provider corrections are detected and stored as new revisions.
+- Gaps are gaps. Coinbase publishes no candle for a minute without trades, and nothing fills it.
+
+Left out on purpose, with the phase that should pick each up:
+
+- **Alpha Vantage and CoinGecko fallbacks** are not implemented (Phase 10). The single-provider path is the one that matters until analysis exists.
+- **Corporate actions.** Only `adj_close` is stored. Tiingo also returns `divCash` and `splitFactor`, which Phase 8 will likely need to evaluate signals that span a split. `adj_close` is as of fetch time, so for bars older than the overlap window it goes stale after a later dividend or split. Phase 8 must add a full-history refresh or store the corporate actions.
+- **Staleness.** The Market page shows each bar's date and when it became usable, but there is no "stale" flag, because that needs an exchange calendar (weekends and holidays are not errors).
+- **The rate limiter is per process.** If several workers ever share a provider, move the window into Redis.
+- **HTTP response caching.** Ingestion is idempotent and stays far under the free-tier limits, so it was skipped.
+- **Live verification.** This build environment cannot reach the providers, so the adapters were tested against mocked responses that follow the providers' documented shapes, not recorded live responses. The first run against real endpoints may reveal differences; the failure paths above are designed to make that visible rather than silent.
 
 ### Future extension points (not in the MVP)
 

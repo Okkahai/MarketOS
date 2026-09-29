@@ -34,6 +34,21 @@ class Settings(BaseSettings):
     base_currency: str = Field(default="USD", pattern=r"^[A-Z]{3}$")
 
     schedule_heartbeat_seconds: int = Field(default=60, ge=10)
+    schedule_stock_daily_seconds: int = Field(default=3600, ge=60)
+    schedule_crypto_daily_seconds: int = Field(default=3600, ge=60)
+    schedule_crypto_1m_seconds: int = Field(default=60, ge=30)
+    schedule_indicators_seconds: int = Field(default=3600, ge=60)
+
+    # Market data collection
+    market_history_days: int = Field(default=400, ge=30, le=3650)
+    market_intraday_backfill_hours: int = Field(default=24, ge=1, le=168)
+    # Re-fetched days before the newest stored bar, so provider corrections are caught.
+    market_overlap_days: int = Field(default=5, ge=1, le=30)
+    indicator_store_bars: int = Field(default=30, ge=1, le=1000)
+    provider_http_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+    provider_max_retries: int = Field(default=3, ge=0, le=6)
+    # Below Tiingo's published free-tier limit of 50/hour, to absorb window edges.
+    tiingo_max_requests_per_hour: int = Field(default=40, ge=1)
 
     tiingo_api_key: SecretStr | None = None
     alpha_vantage_api_key: SecretStr | None = None

@@ -13,11 +13,27 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,
     timezone="UTC",
     enable_utc=True,
-    # Intervals come from settings; later phases add market, news, AI and evaluation jobs here.
+    # Intervals come from settings; later phases add news, AI and evaluation jobs here.
     beat_schedule={
         "heartbeat": {
             "task": "marketos.heartbeat",
             "schedule": float(settings.schedule_heartbeat_seconds),
+        },
+        "ingest_stock_daily": {
+            "task": "marketos.ingest_stock_daily",
+            "schedule": float(settings.schedule_stock_daily_seconds),
+        },
+        "ingest_crypto_daily": {
+            "task": "marketos.ingest_crypto_daily",
+            "schedule": float(settings.schedule_crypto_daily_seconds),
+        },
+        "ingest_crypto_1m": {
+            "task": "marketos.ingest_crypto_1m",
+            "schedule": float(settings.schedule_crypto_1m_seconds),
+        },
+        "compute_indicators": {
+            "task": "marketos.compute_indicators",
+            "schedule": float(settings.schedule_indicators_seconds),
         },
     },
 )

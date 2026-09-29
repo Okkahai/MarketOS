@@ -35,6 +35,47 @@ export type SystemRun = {
   error_message: string | null;
 };
 
+export type Interval = "1m" | "5m" | "1h" | "1d";
+
+export type Asset = {
+  symbol: string;
+  name: string;
+  asset_class: "stock" | "etf" | "crypto";
+  exchange: string | null;
+  sector: string | null;
+  currency: string;
+  is_benchmark: boolean;
+  is_active: boolean;
+};
+
+// Prices and volumes are decimal strings straight from the API; only the chart converts them.
+export type Bar = {
+  ts: string;
+  open: string;
+  high: string;
+  low: string;
+  close: string;
+  adj_close: string | null;
+  volume: string;
+  available_at: string;
+  revision: number;
+};
+
+export type WatchlistRow = {
+  symbol: string;
+  name: string;
+  asset_class: string;
+  is_benchmark: boolean;
+  provider: string;
+  last_close: string | null;
+  last_bar_ts: string | null;
+  last_available_at: string | null;
+  change_pct: string | null;
+  volume: string | null;
+};
+
+export type Indicator = { name: string; ts: string; value: string };
+
 export type ApiResult<T> =
   | { ok: true; data: T; httpStatus: number }
   | { ok: false; error: string; httpStatus: number | null };
@@ -80,5 +121,15 @@ export async function getJson<T>(
 export const api = {
   readiness: () => getJson<Readiness>("/health/ready", { acceptStatuses: [503] }),
   systemInfo: () => getJson<SystemInfo>("/api/v1/system/info"),
+  watchlist: () => getJson<WatchlistRow[]>("/api/v1/market/watchlist"),
+  asset: (symbol: string) => getJson<Asset>(`/api/v1/assets/${encodeURIComponent(symbol)}`),
+  intervals: (symbol: string) =>
+    getJson<Interval[]>(`/api/v1/assets/${encodeURIComponent(symbol)}/intervals`),
+  bars: (symbol: string, interval: Interval, limit = 300) =>
+    getJson<Bar[]>(
+      `/api/v1/assets/${encodeURIComponent(symbol)}/bars?interval=${interval}&limit=${limit}`,
+    ),
+  indicators: (symbol: string) =>
+    getJson<Indicator[]>(`/api/v1/assets/${encodeURIComponent(symbol)}/indicators`),
   recentRuns: (limit = 20) => getJson<SystemRun[]>(`/api/v1/system/runs?limit=${limit}`),
 };
