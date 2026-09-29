@@ -661,7 +661,7 @@ Each phase ends with passing tests, a PR, and an update to this document if a de
 | **3. News** (done) | Tiingo News, SEC EDGAR, Fed RSS | normalization, `content_hash` + title-similarity dedup, ticker extraction, news page | dedup and timestamp tests |
 | **4. Events** (done) | clustering, scoring, asset linking | `events`, `event_sources`, `event_assets`, events page | clustering tests on fixture articles |
 | **5. AI analysis** (done) | context builder, LLM client, schemas | `context_snapshots`, `ai_analyses`, `signals`, triage + main model, cost tracking, cache | lookahead test on snapshots; schema rejection tests |
-| **6. Paper trading** | risk engine, fills, ledger, positions | `risk_decisions`, `trades`, `cash_ledger`, `positions`, immutability triggers, reconciliation | accounting, sizing and risk-rule tests |
+| **6. Paper trading** (done) | risk engine, fills, ledger, positions | `risk_decisions`, `trades`, `cash_ledger`, `positions`, immutability triggers, reconciliation | accounting, sizing and risk-rule tests |
 | **7. Dashboard** | overview, portfolio, trades, journal, asset detail | signal trace endpoint and the pages listed in the product brief | every position explainable in two clicks |
 | **8. Analytics** | snapshots, evaluations, metrics, benchmarks | `portfolio_snapshots`, `performance_evaluations`, analytics page | metric tests against hand-computed fixtures |
 | **9. Backtesting** | replay clock, historical runs | `ReplayClock`, backtest runner, isolated portfolios | chronology tests: no row read with `available_at > clock` |
@@ -741,7 +741,7 @@ Behaviour worth knowing:
 - **Untrusted text.** Articles reach the model only inside a `<data>` block, and the system prompt says that block is untrusted, must not be obeyed, and that null means unknown. Beyond the prompt, the reply is checked: the asset must be one of the candidates, cited events and articles must exist in the input, non-HOLD signals need a thesis, bear case and invalidation conditions, and a buy needs a stop loss. A reply that fails is stored with its errors and makes no signal. Model output can never place an order; Phase 6's risk engine applies its own limits.
 - **Cost control.** Events must exceed `AI_MIN_EVENT_IMPORTANCE`; at most `AI_MAX_EVENTS_PER_RUN` per run; one analysis per event per `AI_REANALYZE_HOURS`; an identical request (same model, prompt version and facts, `as_of` ignored) is never repeated, and a cached triage answer is reused; nothing is called once today's estimated spend reaches `AI_DAILY_BUDGET_USD`, and the run says why it stopped. Prices are per million tokens and come only from `AI_MODEL_PRICES`. MarketOS does not guess them, and a model without a price is never called, so the budget can always be enforced.
 - **Failures.** No key or no price is a `skipped` run. An auth or rate-limit error stops the run; other provider errors are recorded (`provider_failures` plus an `ai_analyses` row with status `error`) and the run continues. A refusal, a truncated reply or a reply without the tool call is stored as `refused` or `invalid`.
-- `signals.reference_price` is the last close the model was shown and `reference_price_ts` its bar, so Phase 8 can evaluate each signal against what the model actually saw. `portfolio_context` stays null until Phase 6.
+- `signals.reference_price` is the last close the model was shown and `reference_price_ts` its bar, so Phase 8 can evaluate each signal against what the model actually saw. `portfolio_context` is null while no paper portfolio exists (filled from Phase 6).
 
 Left out on purpose:
 
@@ -750,7 +750,37 @@ Left out on purpose:
 - **`analysis_events`.** One event per analysis, so the FK on `ai_analyses` is enough.
 - **Retrying invalid replies.** An invalid triage or analysis is retried on a later run only while the event still qualifies; there is no per-event retry cap beyond the daily budget.
 - **Related past events are shallow:** same category and a shared ticker, with the 5-day move of the first shared asset when its bars are available. It is context, not a base rate.
-- **Portfolio in the prompt** arrives with Phase 6; `vix_proxy` stays null.
+- **Portfolio in the prompt** arrived with Phase 6; `vix_proxy` stays null.
+
+### Phase 6 notes: what was built and what was left out
+
+Built: a risk engine (`app/trading/risk.py`, pure, every rule recorded in `risk_decisions.rules_evaluated`), Decimal accounting (`rules.py`: slippage, fees, average cost, realised P&L), one atomic execution path (`execute.py`: trade, ledger row, position, portfolio cash and order in one transaction, portfolio row locked), a cycle job every `SCHEDULE_PAPER_SECONDS` (exits, decisions, fills, hourly snapshot), an hourly reconciliation job, the tables `portfolios`, `orders`, `risk_decisions`, `trades`, `cash_ledger`, `positions`, `portfolio_snapshots`, the read API (`/portfolio`, `/portfolio/snapshots`, `/trades`, `/risk-decisions`, `/orders`), the Portfolio and Trades pages, and the portfolio in the model's context and in `signals.portfolio_context`.
+
+Behaviour worth knowing:
+
+- **Every signal gets a verdict**, one per portfolio (unique on signal and portfolio), with the rules checked, the portfolio state and the config that applied. HOLD and AVOID are recorded as rejected ("does not open or close a position"). SELL closes the whole position, REDUCE sells half. Exits are not blocked by confidence, cooldown or the drawdown breaker; those apply to entries only.
+- **Fill rule.** An order made at decision time t fills at the open of the first bar that opens strictly after t and is already available. Stocks: the next 09:30 New York open (a daily bar dated D opens at 09:30 on D and becomes available at 20:00 on D, so it is filled on the next cycle after that). Crypto: the next `PAPER_CRYPTO_FILL_INTERVAL` bar (`1m` by default). No bar means the order waits, then expires after `PAPER_ORDER_EXPIRY_HOURS`; it is never filled at a guess. Slippage is adverse (`PAPER_SLIPPAGE_BPS_*`), fees are `max(min_fee, gross x bps / 10,000)`, quantities round down (6 places stock, 8 crypto), money is quantised to 8 places half-even.
+- **Cash.** Cash is never negative: pending buys reserve cash and count against the position, sector and crypto limits before they fill, the execution path re-checks, and the database has `CHECK (cash >= 0)` on the portfolio and `balance_after >= 0` on the ledger.
+- **Sizing.** Requested size is the model's suggestion, else `PAPER_DEFAULT_POSITION_PCT`, capped at `PAPER_MAX_POSITION_PCT`; then room under the position, sector, crypto and cash-reserve limits shrinks it (the smallest wins); below `PAPER_MIN_TRADE_USD` it is rejected. Stops default to `PAPER_DEFAULT_STOP_PCT` and are capped at `PAPER_MAX_STOP_PCT`; take-profit is capped at `PAPER_MAX_TAKE_PROFIT_PCT`.
+- **Stops and targets** are checked on completed daily bars that open after the last entry: a gap through the stop fills at the open, a target fills at the target (or the open if it gapped past), and a bar that touches both counts as a stop. The exit trade is stamped with the bar's `available_at`, the moment the engine could have known.
+- **Immutability.** `trades`, `cash_ledger`, `risk_decisions` and `portfolio_snapshots` reject UPDATE and DELETE by trigger. `orders` and `positions` are the only mutable tables; `positions` is derived state.
+- **Reconciliation** replays the ledger (running balance against `balance_after` and `portfolio.cash`) and the trades (average cost, cost basis and realised P&L against `positions`). Any difference makes the `reconcile` run `failed` with the issues listed; nothing is silently corrected.
+- `portfolio_snapshots.total_value` is null when a position had no price; an incomplete valuation is recorded as such.
+
+Deviations from the earlier design text:
+
+- **Price freshness** is measured in hours (`PAPER_MAX_PRICE_AGE_HOURS_STOCK` 100, `_CRYPTO` 36) because the model sees daily bars. The design's 15-minute figure for crypto would reject every signal.
+- **`portfolio_snapshots`** moved from Phase 8 to Phase 6 because the drawdown breaker needs a peak value. Phase 8 builds analytics on it.
+- `trades` and `cash_ledger` carry a `seq` identity column: uuid7 ids are not monotonic within a millisecond, and replay needs a strict order.
+
+Left out on purpose:
+
+- **Shorting, leverage, margin, partial fills, limit orders.** Long-only market orders at the next open.
+- **Intraday stop monitoring.** Stops use daily bars, so an intraday breach that recovers by the close is not seen.
+- **Live-price valuation for stocks.** Positions are marked at the latest usable close.
+- **Sector and class attribution of pending buys beyond the sector name** and a single portfolio ("main"); multi-portfolio support arrives with Phase 9's isolated backtest portfolios.
+- **Concurrency.** One cycle at a time (Celery beat); a concurrent cycle would fail on the unique decision constraint rather than double-trade.
+- **Live verification.** Everything here runs on fixtures and synthetic bars.
 
 ### Future extension points (not in the MVP)
 

@@ -29,6 +29,7 @@ from app.jobs.runner import JobContext, run_job
 from app.models import AiAnalysis, Asset, ContextSnapshot, Event, Signal
 from app.providers.base import ProviderAuthError, ProviderError, ProviderRateLimited
 from app.providers.failures import record_failure
+from app.trading.state import portfolio_view
 
 logger = logging.getLogger(__name__)
 
@@ -126,9 +127,10 @@ def _run(
         .order_by(Event.importance.desc(), Event.last_updated_at.desc())
         .limit(settings.ai_max_events_per_run)
     ).all()
+    portfolio = portfolio_view(session, settings, now)
     for event in events:
         t.events += 1
-        context = build_context(session, event.id, now)
+        context = build_context(session, event.id, now, portfolio)
         if context is None or not context["candidate_assets"]:
             continue  # nothing priced to recommend: no call, no cost
         _process_event(session, settings, llm, ctx, event.id, context, now, t)
@@ -295,6 +297,7 @@ def _store_signals(
                 suggested_position_size_pct=s.suggested_position_size_pct,
                 suggested_stop_loss_pct=s.suggested_stop_loss_pct,
                 suggested_take_profit_pct=s.suggested_take_profit_pct,
+                portfolio_context=context["portfolio"],
                 mode="live_paper",
             )  # fmt: skip
         )

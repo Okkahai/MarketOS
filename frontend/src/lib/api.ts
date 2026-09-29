@@ -179,6 +179,81 @@ export type AiUsage = {
   output_tokens: number;
 };
 
+export type PortfolioPosition = {
+  symbol: string;
+  quantity: string;
+  avg_cost: string;
+  cost_basis: string;
+  price: string | null;
+  price_ts: string | null;
+  market_value: string | null;
+  unrealized_pnl: string | null;
+  realized_pnl: string;
+  stop_price: string | null;
+  target_price: string | null;
+  opened_at: string;
+  signal_id: string;
+};
+
+export type Portfolio = {
+  name: string;
+  mode: string;
+  starting_capital: string;
+  cash: string;
+  positions_value: string | null;
+  total_value: string | null;
+  peak_value: string;
+  drawdown_pct: string | null;
+  realized_pnl: string;
+  complete: boolean;
+  positions: PortfolioPosition[];
+};
+
+export type Trade = {
+  id: string;
+  symbol: string;
+  side: string;
+  reason: string;
+  quantity: string;
+  reference_price: string;
+  price: string;
+  slippage_bps: string;
+  fee: string;
+  cash_change: string;
+  realized_pnl: string;
+  executed_at: string;
+  price_ts: string;
+  signal_id: string;
+};
+
+export type RiskDecision = {
+  id: string;
+  signal_id: string;
+  symbol: string;
+  action: string;
+  confidence: string;
+  decision: "approved" | "reduced" | "rejected";
+  reasons: string[];
+  rules_evaluated: { rule: string; passed: boolean; detail: string }[];
+  requested_notional: string | null;
+  approved_notional: string | null;
+  decided_at: string;
+};
+
+export type PaperOrder = {
+  id: string;
+  symbol: string;
+  side: string;
+  reason: string;
+  status: string;
+  notional: string | null;
+  quantity: string | null;
+  signal_time: string;
+  expires_at: string;
+  filled_at: string | null;
+  signal_id: string;
+};
+
 export type ApiResult<T> =
   | { ok: true; data: T; httpStatus: number }
   | { ok: false; error: string; httpStatus: number | null };
@@ -257,5 +332,15 @@ export const api = {
   },
   analyses: (limit = 30) => getJson<Analysis[]>(`/api/v1/ai/analyses?limit=${limit}`),
   aiUsage: () => getJson<AiUsage>("/api/v1/ai/usage"),
+  portfolio: () => getJson<Portfolio>("/api/v1/portfolio"),
+  trades: (limit = 100) => getJson<Trade[]>(`/api/v1/trades?limit=${limit}`),
+  riskDecisions: (decision?: string) =>
+    getJson<RiskDecision[]>(
+      `/api/v1/risk-decisions?limit=100${decision ? `&decision=${encodeURIComponent(decision)}` : ""}`,
+    ),
+  orders: (status?: string) =>
+    getJson<PaperOrder[]>(
+      `/api/v1/orders?limit=50${status ? `&status=${encodeURIComponent(status)}` : ""}`,
+    ),
   recentRuns: (limit = 20) => getJson<SystemRun[]>(`/api/v1/system/runs?limit=${limit}`),
 };

@@ -15,7 +15,8 @@ The full design, including the database schema, provider choices, accounting rul
 | 3 | News (Tiingo News, SEC EDGAR, Fed RSS), dedup, News feed page | done, needs live verification with `TIINGO_API_KEY` and `SEC_USER_AGENT` |
 | 4 | Events: rule-based clustering, scoring, asset linking, Events page | done, threshold unproven on real headlines |
 | 5 | AI analysis: context builder, triage + analysis models, validated signals journal, cost budget, AI journal page | done, needs a live run with `ANTHROPIC_API_KEY` and `AI_MODEL_PRICES` |
-| 6–10 | Paper trading, dashboard, analytics, backtesting, hardening | planned |
+| 6 | Paper trading: risk engine, fills, ledger, positions, reconciliation, Portfolio and Trades pages | done, simulation only |
+| 7–10 | Dashboard, analytics, backtesting, hardening | planned |
 
 ## Run with Docker
 

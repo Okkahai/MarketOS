@@ -15,6 +15,8 @@ from app.providers.registry import (
     build_sec,
     build_tiingo,
 )
+from app.trading.engine import run_paper_cycle
+from app.trading.reconcile import run_reconcile
 
 
 @celery_app.task(name="marketos.heartbeat")
@@ -150,3 +152,13 @@ def cluster_events() -> str:
 def ai_analysis() -> str:
     settings = get_settings()
     return str(run_ai_analysis(get_session_factory(), settings, build_anthropic(settings)))
+
+
+@celery_app.task(name="marketos.paper_cycle")
+def paper_cycle() -> str:
+    return str(run_paper_cycle(get_session_factory(), get_settings()))
+
+
+@celery_app.task(name="marketos.reconcile")
+def reconcile() -> str:
+    return str(run_reconcile(get_session_factory()))
