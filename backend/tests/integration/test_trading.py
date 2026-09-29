@@ -370,3 +370,28 @@ def test_the_analyst_sees_the_portfolio_once_it_exists(db):
         view = portfolio_view(s, SETTINGS, now)
     assert view["open_positions"] == 1 and view["cash"] == "9600.00010000"
     assert view["positions"][0]["symbol"] == "AAPL" and view["equity"] is not None
+
+
+def test_trace_explains_a_position_from_signal_to_trade(db):
+    from app.db.session import get_db
+    from app.main import create_app
+
+    app = create_app()
+
+    def override():
+        with db() as s:
+            yield s
+
+    app.dependency_overrides[get_db] = override
+    api = TestClient(app)
+    bought(db)
+    sig = rows(db, Signal)[0]
+    t = api.get(f"/api/v1/signals/{sig.id}/trace").json()
+    assert t["signal"]["symbol"] == "AAPL" and t["event"]["title"] == "test"
+    assert t["decision"]["decision"] == "approved" and t["decision"]["rules_evaluated"]
+    assert [o["status"] for o in t["orders"]] == ["filled"]
+    assert [x["side"] for x in t["trades"]] == ["BUY"]
+    assert t["position"]["stop_price"] == "92.04600000"
+    assert len(api.get("/api/v1/trades?symbol=aapl").json()) == 1
+    assert api.get("/api/v1/trades?symbol=MSFT").json() == []
+    assert api.get("/api/v1/signals/00000000-0000-0000-0000-000000000000/trace").status_code == 404

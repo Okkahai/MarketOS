@@ -50,9 +50,11 @@ export default async function AssetPage({
   const interval: Interval =
     requested && offered.includes(requested) ? requested : (offered[0] ?? "1d");
 
-  const [bars, indicators] = await Promise.all([
+  const [bars, indicators, signals, trades] = await Promise.all([
     offered.length ? api.bars(symbol, interval) : Promise.resolve(null),
     api.indicators(symbol),
+    api.signals({ symbol }),
+    api.trades(20, symbol),
   ]);
 
   return (
@@ -132,8 +134,31 @@ export default async function AssetPage({
       </section>
 
       <section className="card">
-        <h2>AI thesis, predictions and trades</h2>
-        <p className="muted">These sections arrive with the AI analysis and paper trading phases.</p>
+        <h2>Recommendations and trades</h2>
+        {signals.ok && signals.data.length > 0 ? (
+          <ul>
+            {signals.data.slice(0, 8).map((x) => (
+              <li key={x.id}>
+                {formatUtc(x.generated_at)} · {x.action.replace("_", " ")} · confidence{" "}
+                {formatDecimalString(x.confidence, 2, 2)} · <Link href={`/signals/${x.id}`}>trace</Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted">No recommendations for this asset yet.</p>
+        )}
+        {trades.ok && trades.data.length > 0 ? (
+          <ul>
+            {trades.data.map((t) => (
+              <li key={t.id}>
+                {formatUtc(t.executed_at)} · {t.side} {formatDecimalString(t.quantity, 2, 8)} at{" "}
+                {formatDecimalString(t.price, 2, 4)} · <Link href={`/signals/${t.signal_id}`}>why</Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted">No paper trades in this asset.</p>
+        )}
       </section>
     </>
   );

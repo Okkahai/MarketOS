@@ -97,6 +97,9 @@ function SignalCard({ signal: s }: { signal: Signal }) {
         seen {formatDecimalString(s.reference_price)} (bar {s.reference_price_ts.slice(0, 10)})
       </p>
       {s.thesis ? <p>{s.thesis}</p> : null}
+      <p>
+        <Link href={`/signals/${s.id}`}>Trace: risk verdict and trades</Link>
+      </p>
       <details>
         <summary>Reasoning, risks and evidence</summary>
         {s.bull_case ? <p><strong>Bull case:</strong> {s.bull_case}</p> : null}

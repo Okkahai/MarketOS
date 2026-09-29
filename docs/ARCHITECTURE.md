@@ -662,7 +662,7 @@ Each phase ends with passing tests, a PR, and an update to this document if a de
 | **4. Events** (done) | clustering, scoring, asset linking | `events`, `event_sources`, `event_assets`, events page | clustering tests on fixture articles |
 | **5. AI analysis** (done) | context builder, LLM client, schemas | `context_snapshots`, `ai_analyses`, `signals`, triage + main model, cost tracking, cache | lookahead test on snapshots; schema rejection tests |
 | **6. Paper trading** (done) | risk engine, fills, ledger, positions | `risk_decisions`, `trades`, `cash_ledger`, `positions`, immutability triggers, reconciliation | accounting, sizing and risk-rule tests |
-| **7. Dashboard** | overview, portfolio, trades, journal, asset detail | signal trace endpoint and the pages listed in the product brief | every position explainable in two clicks |
+| **7. Dashboard** (done) | overview, portfolio, trades, journal, asset detail | signal trace endpoint and the pages listed in the product brief | every position explainable in two clicks |
 | **8. Analytics** | snapshots, evaluations, metrics, benchmarks | `portfolio_snapshots`, `performance_evaluations`, analytics page | metric tests against hand-computed fixtures |
 | **9. Backtesting** | replay clock, historical runs | `ReplayClock`, backtest runner, isolated portfolios | chronology tests: no row read with `available_at > clock` |
 | **10. Hardening** | resilience and ops | provider fallback, monitoring page, alerting, security review, load of 6 months of history | failure-injection tests |
@@ -781,6 +781,16 @@ Left out on purpose:
 - **Sector and class attribution of pending buys beyond the sector name** and a single portfolio ("main"); multi-portfolio support arrives with Phase 9's isolated backtest portfolios.
 - **Concurrency.** One cycle at a time (Celery beat); a concurrent cycle would fail on the unique decision constraint rather than double-trade.
 - **Live verification.** Everything here runs on fixtures and synthetic bars.
+
+### Phase 7 notes: what was built and what was left out
+
+Built: `GET /api/v1/signals/{id}/trace` (signal, the event and articles exactly as the model saw them from the stored context snapshot, the analysis and its input fingerprint, the risk verdict with every rule, orders, trades and the position), a trace page at `/signals/{id}`, an Overview page, a symbol filter on `/trades`, and trace links from the portfolio, trades, decisions, journal, overview and asset pages. Two clicks explain any position: Portfolio, then Trace.
+
+Left out on purpose:
+
+- **Charts of portfolio value and drawdown** arrive with Phase 8, where the metrics that go with them are computed.
+- **Trade markers on the price chart.** The asset page lists recommendations and trades beside the chart instead.
+- **Live refresh.** Pages are server-rendered on each load; there is no websocket push.
 
 ### Future extension points (not in the MVP)
 

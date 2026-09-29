@@ -119,6 +119,7 @@ function Positions({ p }: { p: Portfolio }) {
             <th className="num">Unrealised</th>
             <th className="num">Stop / target</th>
             <th>Opened (UTC)</th>
+            <th>Why</th>
           </tr>
         </thead>
         <tbody>
@@ -139,6 +140,9 @@ function Positions({ p }: { p: Portfolio }) {
                 {x.target_price ? formatDecimalString(x.target_price, 2, 4) : "—"}
               </td>
               <td>{formatUtc(x.opened_at)}</td>
+              <td>
+                <Link href={`/signals/${x.signal_id}`}>Trace</Link>
+              </td>
             </tr>
           ))}
         </tbody>

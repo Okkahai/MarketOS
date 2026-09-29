@@ -4,7 +4,7 @@ import Link from "next/link";
 // listed but not linked, so the UI never shows an empty page dressed up as real.
 const NAV: { label: string; href?: string; phase?: number }[] = [
   { label: "System status", href: "/" },
-  { label: "Overview", phase: 7 },
+  { label: "Overview", href: "/overview" },
   { label: "News feed", href: "/news" },
   { label: "Events", href: "/events" },
   { label: "Market", href: "/market" },
