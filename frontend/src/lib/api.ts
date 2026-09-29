@@ -352,6 +352,44 @@ export type Snapshot = {
   complete: boolean;
 };
 
+export type BacktestSummary = {
+  steps: number;
+  events_analysed: number;
+  signals: number;
+  signals_journalled: number;
+  trade_count: number;
+  orders_filled: number;
+  orders_expired: number;
+  decisions: Record<string, number>;
+  portfolio: {
+    days: number;
+    return_pct: number | null;
+    max_drawdown_pct: number | null;
+    sharpe: number | null;
+    sortino: number | null;
+    incomplete_snapshots: number;
+  };
+  benchmarks: { symbol: string; return_pct: number | null }[];
+  trades: AnalyticsSummary["trades"];
+  notes: string;
+};
+
+export type BacktestRun = {
+  id: string;
+  name: string;
+  status: string;
+  start_at: string;
+  end_at: string;
+  step_hours: number;
+  initial_capital: string;
+  summary: BacktestSummary | null;
+  error: string | null;
+  started_at: string;
+  finished_at: string | null;
+};
+
+export type BacktestDetail = BacktestRun & { params: Record<string, unknown>; snapshots: Snapshot[] };
+
 export type ApiResult<T> =
   | { ok: true; data: T; httpStatus: number }
   | { ok: false; error: string; httpStatus: number | null };
@@ -449,5 +487,9 @@ export const api = {
   evaluations: (wrongOnly = false) =>
     getJson<Evaluation[]>(`/api/v1/analytics/evaluations?limit=60&wrong_only=${wrongOnly}`),
   snapshots: () => getJson<Snapshot[]>("/api/v1/portfolio/snapshots"),
+  backtests: () => getJson<BacktestRun[]>("/api/v1/backtests"),
+  backtest: (id: string) => getJson<BacktestDetail>(`/api/v1/backtests/${encodeURIComponent(id)}`),
+  backtestTrades: (id: string) =>
+    getJson<Trade[]>(`/api/v1/backtests/${encodeURIComponent(id)}/trades`),
   recentRuns: (limit = 20) => getJson<SystemRun[]>(`/api/v1/system/runs?limit=${limit}`),
 };

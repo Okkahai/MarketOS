@@ -91,6 +91,7 @@ def list_signals(
         .join(Asset, Asset.id == Signal.asset_id)
         .join(AiAnalysis, AiAnalysis.id == Signal.analysis_id)
         .join(Event, Event.id == AiAnalysis.event_id)
+        .where(Signal.mode == "live_paper")  # backtest signals are shown on their own pages
         .order_by(Signal.generated_at.desc(), Signal.id.desc())
         .limit(limit)
     )

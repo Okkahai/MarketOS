@@ -664,7 +664,7 @@ Each phase ends with passing tests, a PR, and an update to this document if a de
 | **6. Paper trading** (done) | risk engine, fills, ledger, positions | `risk_decisions`, `trades`, `cash_ledger`, `positions`, immutability triggers, reconciliation | accounting, sizing and risk-rule tests |
 | **7. Dashboard** (done) | overview, portfolio, trades, journal, asset detail | signal trace endpoint and the pages listed in the product brief | every position explainable in two clicks |
 | **8. Analytics** (done) | snapshots, evaluations, metrics, benchmarks | `portfolio_snapshots`, `performance_evaluations`, analytics page | metric tests against hand-computed fixtures |
-| **9. Backtesting** | replay clock, historical runs | `ReplayClock`, backtest runner, isolated portfolios | chronology tests: no row read with `available_at > clock` |
+| **9. Backtesting** (done) | replay clock, historical runs | `ReplayClock`, backtest runner, isolated portfolios | chronology tests: no row read with `available_at > clock` |
 | **10. Hardening** | resilience and ops | provider fallback, monitoring page, alerting, security review, load of 6 months of history | failure-injection tests |
 
 Everything from Phase 5 onward depends on Phases 2, 3 and 4.
@@ -819,6 +819,19 @@ Left out on purpose:
 - **Statistical significance.** No confidence intervals; with a handful of signals the hit rate is noise, and the page says so.
 - **Per-model and per-category breakdowns**, **calibration curves** and **factor attribution.** The rows carry what is needed to add them.
 - **A daily report job.** The page computes on request; nothing is precomputed.
+
+### Phase 9 notes: what was built and what was left out
+
+- **Replay** (`python -m app.backtest --start --end [--step-hours 24]`, results at `/backtests`): a `FixedClock` is advanced step by step and every step runs the same `paper_step` (exits, decide, fill, snapshot) as live trading, in its own `Portfolio` (mode `backtest`, `backtest_run_id`). Live endpoints only show `live_paper` rows; backtest signals are journalled with mode `backtest` and bypass the request-hash cache.
+- **No hindsight.** Backtests refuse `AI_PROVIDER=anthropic` (a model trained after the window knows what happened) and windows that are not fully in the past. Only the deterministic rules analyst runs, so two runs of the same window are identical (tested). Bars and news are read with `available_at <= t`; tests inject a late-arriving bar and post-window news and check neither is seen.
+- **Crypto fills use daily bars** in backtests (`1m` history is not kept); stops and targets use the same completed-daily-bar rule as live.
+- **Crypto price freshness** default is now 54 h (was 36 h), because the last daily bar's `ts` is its start.
+
+Left out on purpose:
+
+- **News history.** A backtest can only replay news that was collected; a window with little stored news gives few signals. There is no historical news backfill.
+- **Parameter sweeps, walk-forward splits and overfitting checks.** One run is one window and one configuration; comparing runs is manual.
+- **Costs beyond the live model:** the same slippage and fees, no market impact or borrow.
 
 ### Future extension points (not in the MVP)
 
