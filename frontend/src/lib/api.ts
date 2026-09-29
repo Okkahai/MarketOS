@@ -290,6 +290,68 @@ export type Trace = {
   position: PortfolioPosition | null;
 };
 
+export type AnalyticsSummary = {
+  portfolio: {
+    days: number;
+    start_value: number | null;
+    end_value: number | null;
+    return_pct: number | null;
+    max_drawdown_pct: number | null;
+    sharpe: number | null;
+    sortino: number | null;
+    incomplete_snapshots: number;
+  };
+  benchmarks: { symbol: string; return_pct: number | null }[];
+  trades: {
+    closed: number;
+    wins: number;
+    losses: number;
+    win_rate: number | null;
+    profit_factor: number | null;
+    avg_win: number | null;
+    avg_loss: number | null;
+    expectancy: number | null;
+  };
+  closed_positions: {
+    symbol: string;
+    realized_pnl: number;
+    opened_at: string;
+    closed_at: string;
+    signal_id: string;
+  }[];
+  predictions: {
+    horizon: string;
+    evaluated: number;
+    directional: number;
+    hit_rate: number | null;
+    avg_return_pct: number | null;
+    avg_excess_pct: number | null;
+  }[];
+  notes: string;
+};
+
+export type Evaluation = {
+  signal_id: string;
+  symbol: string;
+  action: string;
+  horizon: string;
+  generated_at: string;
+  return_pct: number;
+  mfe_pct: number;
+  mae_pct: number;
+  benchmark_symbol: string | null;
+  excess_return_pct: number | null;
+  direction_correct: boolean | null;
+};
+
+export type Snapshot = {
+  as_of: string;
+  cash: string;
+  positions_value: string | null;
+  total_value: string | null;
+  complete: boolean;
+};
+
 export type ApiResult<T> =
   | { ok: true; data: T; httpStatus: number }
   | { ok: false; error: string; httpStatus: number | null };
@@ -383,5 +445,9 @@ export const api = {
     getJson<PaperOrder[]>(
       `/api/v1/orders?limit=50${status ? `&status=${encodeURIComponent(status)}` : ""}`,
     ),
+  analytics: () => getJson<AnalyticsSummary>("/api/v1/analytics/summary"),
+  evaluations: (wrongOnly = false) =>
+    getJson<Evaluation[]>(`/api/v1/analytics/evaluations?limit=60&wrong_only=${wrongOnly}`),
+  snapshots: () => getJson<Snapshot[]>("/api/v1/portfolio/snapshots"),
   recentRuns: (limit = 20) => getJson<SystemRun[]>(`/api/v1/system/runs?limit=${limit}`),
 };

@@ -11,7 +11,7 @@ const NAV: { label: string; href?: string; phase?: number }[] = [
   { label: "Portfolio", href: "/portfolio" },
   { label: "Trades", href: "/trades" },
   { label: "AI journal", href: "/journal" },
-  { label: "Analytics", phase: 8 },
+  { label: "Analytics", href: "/analytics" },
 ];
 
 export function Nav() {

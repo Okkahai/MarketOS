@@ -1,4 +1,5 @@
 from app.ai.analyze import run_ai_analysis
+from app.analytics.evaluate import run_evaluate_signals
 from app.core.config import get_settings
 from app.db.session import get_session_factory
 from app.events.build import run_cluster_events
@@ -162,3 +163,8 @@ def paper_cycle() -> str:
 @celery_app.task(name="marketos.reconcile")
 def reconcile() -> str:
     return str(run_reconcile(get_session_factory()))
+
+
+@celery_app.task(name="marketos.evaluate_signals")
+def evaluate_signals() -> str:
+    return str(run_evaluate_signals(get_session_factory()))

@@ -55,6 +55,10 @@ celery_app.conf.update(
             "task": "marketos.paper_cycle",
             "schedule": float(settings.schedule_paper_seconds),
         },
+        "evaluate_signals": {
+            "task": "marketos.evaluate_signals",
+            "schedule": float(settings.schedule_evaluate_seconds),
+        },
         "reconcile": {
             "task": "marketos.reconcile",
             "schedule": float(settings.schedule_reconcile_seconds),
