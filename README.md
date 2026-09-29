@@ -14,7 +14,7 @@ The full design, including the database schema, provider choices, accounting rul
 | 2 | Market data (Tiingo stocks, Coinbase crypto), indicators, Market and asset pages | done, needs live verification with a Tiingo key |
 | 3 | News (Tiingo News, SEC EDGAR, Fed RSS), dedup, News feed page | done, needs live verification with `TIINGO_API_KEY` and `SEC_USER_AGENT` |
 | 4 | Events: rule-based clustering, scoring, asset linking, Events page | done, threshold unproven on real headlines |
-| 5 | AI analysis: context builder, triage + analysis models, validated signals journal, cost budget, AI journal page | done, needs a live run with `ANTHROPIC_API_KEY` and `AI_MODEL_PRICES` |
+| 5 | AI analysis: context builder, triage + analysis, validated signals journal, cost budget, AI journal page | done. Default analyst is free and rule-based (`AI_PROVIDER=rules`); Claude is optional (`AI_PROVIDER=anthropic`, paid, needs a key and `AI_MODEL_PRICES`) |
 | 6 | Paper trading: risk engine, fills, ledger, positions, reconciliation, Portfolio and Trades pages | done, simulation only |
 | 7 | Dashboard: Overview page, signal trace (signal to risk verdict to trades), links everywhere | done |
 | 8 | Analytics: signal evaluations, portfolio metrics against SPY, BTC and cash, Analytics page | done |

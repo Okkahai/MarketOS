@@ -8,10 +8,14 @@ from decimal import Decimal
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 APP_VERSION = "0.1.0"
+
+
+RULES_TRIAGE_MODEL = "rules-triage-1"
+RULES_ANALYSIS_MODEL = "rules-analysis-1"
 
 
 class Settings(BaseSettings):
@@ -100,6 +104,8 @@ class Settings(BaseSettings):
     # AI analysis. Prices are per million tokens and must be set by the operator for every model
     # in use; a model without a price is never called, so the budget can always be enforced.
     # Example: AI_MODEL_PRICES={"claude-haiku-4-5-20251001":{"input":"1","output":"5"}}
+    # "rules" is free and needs no key; "anthropic" uses the Claude API (ANTHROPIC_API_KEY, paid)
+    ai_provider: Literal["rules", "anthropic"] = "rules"
     ai_triage_model: str = "claude-haiku-4-5-20251001"
     ai_analysis_model: str = "claude-sonnet-5-5"
     ai_model_prices: dict[str, dict[str, Decimal]] = Field(default_factory=dict)
@@ -149,6 +155,16 @@ class Settings(BaseSettings):
             raise ValueError("SEC_USER_AGENT must include a contact email, e.g. 'Name you@x.com'")
         return value
 
+    @model_validator(mode="after")
+    def _rules_analyst_is_free(self) -> "Settings":
+        """The rules analyst has fixed model names and costs nothing, so no price is needed."""
+        if self.ai_provider == "rules":
+            self.ai_triage_model, self.ai_analysis_model = RULES_TRIAGE_MODEL, RULES_ANALYSIS_MODEL
+            zero = {"input": Decimal(0), "output": Decimal(0)}
+            self.ai_model_prices = {**self.ai_model_prices, RULES_TRIAGE_MODEL: zero,
+                                    RULES_ANALYSIS_MODEL: zero}  # fmt: skip
+        return self
+
     def provider_status(self) -> dict[str, bool]:
         """Which providers have credentials. Never exposes the values."""
         return {
@@ -160,6 +176,7 @@ class Settings(BaseSettings):
             "fred": self.fred_api_key is not None,
             "sec_edgar": self.sec_user_agent is not None,
             "anthropic": self.anthropic_api_key is not None,
+            "ai_rules": self.ai_provider == "rules",
         }
 
 

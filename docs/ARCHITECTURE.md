@@ -752,6 +752,16 @@ Left out on purpose:
 - **Related past events are shallow:** same category and a shared ticker, with the 5-day move of the first shared asset when its bars are available. It is context, not a base rate.
 - **Portfolio in the prompt** arrived with Phase 6; `vix_proxy` stays null.
 
+### Free analyst (rules) notes
+
+Decision (Gün, 2026-09-29): no paid AI by default. `AI_PROVIDER=rules` (the default) swaps the model for `app/ai/rules_llm.py`, which implements the same `LlmClient` interface and returns the same structured output from the same stored context, so the snapshots, validation, journal, risk engine and paper trading are untouched. `AI_PROVIDER=anthropic` keeps the Claude path and its budget and price controls.
+
+How it decides: it counts positive and negative cue words in the original (non-copy) headlines and excerpts of the event, giving a tone in [-1, 1]. Triage passes an event when the tone is clear (|tone| at least 0.2). Analysis acts when |tone| is at least 0.34: BUY, or STRONG_BUY at 0.67 with importance 0.6 or more; guards turn a buy into HOLD when RSI 14 is 75 or above, the 5-day move already exceeds 12%, or the price is more than 10% under its 50-day average. Bad news gives AVOID for an asset not held, REDUCE or SELL (at -0.67) for one that is. Confidence is `0.30 + 0.25 x |tone| + 0.25 x importance + 0.10 x event confidence`, plus 0.05 when the 50-day trend agrees, capped at 0.85, so weak or low-importance events fall under the 0.60 the risk engine requires. The stop is twice the ATR percentage, kept between 3% and 8%, and the take profit twice the stop. Each signal carries its evidence headlines, an invalidation condition and a bear case that says what the method cannot see.
+
+Why it is a reasonable free choice: it is deterministic, costs nothing, cannot be prompt-injected (article text is only matched against word lists) and can be replayed exactly in a backtest, which a hosted model cannot. Weaknesses: it reads wording, not meaning. It misses sarcasm, negation ("does not beat"), magnitude and surprise, and its word lists are unproven on real headlines. Phase 8's evaluations are the way to find out whether it has any edge, and expect it may not.
+
+Left out: a local model (Ollama) or a free hosted tier behind the same interface. It would fit, but free hosted tiers have unverified quotas and data terms, and a local model needs hardware I cannot see.
+
 ### Phase 6 notes: what was built and what was left out
 
 Built: a risk engine (`app/trading/risk.py`, pure, every rule recorded in `risk_decisions.rules_evaluated`), Decimal accounting (`rules.py`: slippage, fees, average cost, realised P&L), one atomic execution path (`execute.py`: trade, ledger row, position, portfolio cash and order in one transaction, portfolio row locked), a cycle job every `SCHEDULE_PAPER_SECONDS` (exits, decisions, fills, hourly snapshot), an hourly reconciliation job, the tables `portfolios`, `orders`, `risk_decisions`, `trades`, `cash_ledger`, `positions`, `portfolio_snapshots`, the read API (`/portfolio`, `/portfolio/snapshots`, `/trades`, `/risk-decisions`, `/orders`), the Portfolio and Trades pages, and the portfolio in the model's context and in `signals.portfolio_context`.
