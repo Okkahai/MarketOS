@@ -1,5 +1,6 @@
 from app.core.config import get_settings
 from app.db.session import get_session_factory
+from app.events.build import run_cluster_events
 from app.jobs.celery_app import celery_app
 from app.jobs.runner import run_job
 from app.market.compute import run_compute_indicators
@@ -131,3 +132,8 @@ def ingest_news_fed() -> str:
             fetcher=lambda since: fed.fetch_feeds(http),
         )  # fmt: skip
     )
+
+
+@celery_app.task(name="marketos.cluster_events")
+def cluster_events() -> str:
+    return str(run_cluster_events(get_session_factory(), get_settings()))

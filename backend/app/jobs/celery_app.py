@@ -43,6 +43,10 @@ celery_app.conf.update(
             "task": "marketos.ingest_news_fed",
             "schedule": float(settings.schedule_news_seconds),
         },
+        "cluster_events": {
+            "task": "marketos.cluster_events",
+            "schedule": float(settings.schedule_events_seconds),
+        },
         "compute_indicators": {
             "task": "marketos.compute_indicators",
             "schedule": float(settings.schedule_indicators_seconds),
