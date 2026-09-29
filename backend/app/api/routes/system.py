@@ -1,6 +1,6 @@
 import uuid
-from datetime import datetime
-from typing import Annotated
+from datetime import UTC, datetime
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict
@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import APP_VERSION, get_settings
 from app.db.session import get_db
 from app.models import SystemRun
+from app.monitor import health_report
 
 router = APIRouter(prefix="/api/v1/system", tags=["system"])
 
@@ -63,3 +64,9 @@ def recent_runs(
     if job_name:
         query = query.where(SystemRun.job_name == job_name)
     return list(db.scalars(query))
+
+
+@router.get("/health")
+def health(db: Annotated[Session, Depends(get_db)]) -> dict[str, Any]:
+    """Open alerts: failed, stale, stuck or never-run jobs, and recent provider failures."""
+    return health_report(db, get_settings(), datetime.now(UTC))

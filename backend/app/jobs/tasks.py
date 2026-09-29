@@ -1,5 +1,8 @@
+import logging
+
 from app.ai.analyze import run_ai_analysis
 from app.analytics.evaluate import run_evaluate_signals
+from app.core.clock import LiveClock
 from app.core.config import get_settings
 from app.db.session import get_session_factory
 from app.events.build import run_cluster_events
@@ -7,6 +10,7 @@ from app.jobs.celery_app import celery_app
 from app.jobs.runner import run_job
 from app.market.compute import run_compute_indicators
 from app.market.ingest import run_ingest
+from app.monitor import health_report
 from app.news.ingest import run_news_source, tracked_symbols
 from app.providers import fed
 from app.providers.registry import (
@@ -18,6 +22,8 @@ from app.providers.registry import (
 )
 from app.trading.engine import run_paper_cycle
 from app.trading.reconcile import run_reconcile
+
+logger = logging.getLogger(__name__)
 
 
 @celery_app.task(name="marketos.heartbeat")
@@ -168,3 +174,16 @@ def reconcile() -> str:
 @celery_app.task(name="marketos.evaluate_signals")
 def evaluate_signals() -> str:
     return str(run_evaluate_signals(get_session_factory()))
+
+
+@celery_app.task(name="marketos.health_check")
+def health_check() -> str:
+    """Logs every open alert at ERROR so log-based alerting has something to match on."""
+    settings = get_settings()
+    with run_job(get_session_factory(), "health_check") as ctx:
+        with get_session_factory()() as session:
+            report = health_report(session, settings, LiveClock().now())
+        for alert in report["alerts"]:
+            logger.error("alert %(code)s %(subject)s: %(message)s", alert)
+        ctx.items_written = len(report["alerts"])
+        return str(ctx.run_id)

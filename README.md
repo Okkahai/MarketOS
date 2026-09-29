@@ -19,7 +19,7 @@ The full design, including the database schema, provider choices, accounting rul
 | 7 | Dashboard: Overview page, signal trace (signal to risk verdict to trades), links everywhere | done |
 | 8 | Analytics: signal evaluations, portfolio metrics against SPY, BTC and cash, Analytics page | done |
 | 9 | Backtesting: replay the live engine over a past window in an isolated portfolio (rules analyst only), Backtests page | done |
-| 10 | Hardening | planned |
+| 10 | Hardening: job health alerts, security headers, failure-injection tests | done. Provider fallback and API auth deliberately left out (see docs) |
 
 ## Run with Docker
 

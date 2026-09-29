@@ -4,10 +4,11 @@ import { formatMoneyString, formatUtc } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 export default async function SystemStatusPage() {
-  const [readiness, info, runs] = await Promise.all([
+  const [readiness, info, runs, health] = await Promise.all([
     api.readiness(),
     api.systemInfo(),
     api.recentRuns(20),
+    api.health(),
   ]);
 
   return (
@@ -81,6 +82,33 @@ export default async function SystemStatusPage() {
             added in Phases 2 and 3.
           </p>
         </div>
+      </section>
+
+      <section className="card">
+        <h2>Alerts</h2>
+        {!health.ok ? (
+          <ErrorNote message={health.error} />
+        ) : health.data.alerts.length === 0 ? (
+          <p>
+            <StatusPill status="ok">All jobs healthy</StatusPill>
+          </p>
+        ) : (
+          <table>
+            <tbody>
+              {health.data.alerts.map((a) => (
+                <tr key={`${a.code}-${a.subject}`}>
+                  <td>
+                    <StatusPill status={a.level === "warning" ? "neutral" : "error"}>
+                      {a.level}
+                    </StatusPill>
+                  </td>
+                  <td>{a.subject}</td>
+                  <td className="muted">{a.message}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </section>
 
       <section className="card">

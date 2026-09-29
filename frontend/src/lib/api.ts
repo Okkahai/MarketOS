@@ -35,6 +35,15 @@ export type SystemRun = {
   error_message: string | null;
 };
 
+export type Alert = {
+  level: "warning" | "error" | "critical";
+  code: string;
+  subject: string;
+  message: string;
+};
+
+export type Health = { ok: boolean; alerts: Alert[]; failures_24h: Record<string, number> };
+
 export type Interval = "1m" | "5m" | "1h" | "1d";
 
 export type Asset = {
@@ -491,5 +500,6 @@ export const api = {
   backtest: (id: string) => getJson<BacktestDetail>(`/api/v1/backtests/${encodeURIComponent(id)}`),
   backtestTrades: (id: string) =>
     getJson<Trade[]>(`/api/v1/backtests/${encodeURIComponent(id)}/trades`),
+  health: () => getJson<Health>(`/api/v1/system/health`),
   recentRuns: (limit = 20) => getJson<SystemRun[]>(`/api/v1/system/runs?limit=${limit}`),
 };
