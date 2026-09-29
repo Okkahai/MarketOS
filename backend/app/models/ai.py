@@ -134,7 +134,9 @@ class Signal(Base):
     # Filled by Phase 6 when a portfolio exists; null means "no portfolio yet", never a guess.
     portfolio_context: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     mode: Mapped[str] = mapped_column(String(10), nullable=False, server_default="live_paper")
-    backtest_run_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    backtest_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("backtest_runs.id", ondelete="RESTRICT")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

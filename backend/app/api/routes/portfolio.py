@@ -172,6 +172,8 @@ def list_trades(
     q = (
         select(Trade, Asset.symbol)
         .join(Asset, Asset.id == Trade.asset_id)
+        .join(Portfolio, Portfolio.id == Trade.portfolio_id)
+        .where(Portfolio.mode == "live_paper")
         .order_by(Trade.seq.desc())
         .limit(limit)
         .offset(offset)
@@ -211,6 +213,8 @@ def list_decisions(
         select(RiskDecision, Signal, Asset.symbol)
         .join(Signal, Signal.id == RiskDecision.signal_id)
         .join(Asset, Asset.id == Signal.asset_id)
+        .join(Portfolio, Portfolio.id == RiskDecision.portfolio_id)
+        .where(Portfolio.mode == "live_paper")
         .order_by(RiskDecision.decided_at.desc(), RiskDecision.id.desc())
         .limit(limit)
         .offset(offset)
@@ -242,6 +246,8 @@ def list_orders(
     q = (
         select(Order, Asset.symbol)
         .join(Asset, Asset.id == Order.asset_id)
+        .join(Portfolio, Portfolio.id == Order.portfolio_id)
+        .where(Portfolio.mode == "live_paper")
         .order_by(Order.created_at.desc(), Order.id.desc())
         .limit(limit)
     )

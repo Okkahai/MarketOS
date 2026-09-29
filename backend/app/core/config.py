@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     paper_order_expiry_hours: int = Field(default=72, ge=1)
     # A daily bar is the freshest price the model sees; these ages allow a weekend or holiday.
     paper_max_price_age_hours_stock: int = Field(default=100, ge=1)
-    paper_max_price_age_hours_crypto: int = Field(default=36, ge=1)
+    paper_max_price_age_hours_crypto: int = Field(default=54, ge=1)
     paper_slippage_bps_stock: Decimal = Field(default=Decimal("5"), ge=0)
     paper_slippage_bps_crypto: Decimal = Field(default=Decimal("10"), ge=0)
     paper_fee_bps_stock: Decimal = Field(default=Decimal("0"), ge=0)

@@ -146,12 +146,21 @@ def load_state(
     )
 
 
-def portfolio_view(session: Session, settings: Settings, now: datetime) -> dict[str, Any] | None:
-    """What the analyst model and the signal journal see of the portfolio; None if none exists."""
-    portfolio = session.scalar(select(Portfolio).where(Portfolio.name == PORTFOLIO_NAME))
+def portfolio_view(
+    session: Session,
+    settings: Settings,
+    now: datetime,
+    portfolio: Portfolio | None = None,
+    cfg: RiskConfig | None = None,
+) -> dict[str, Any] | None:
+    """What the analyst and the signal journal see of the portfolio (the live one unless given);
+    None if none exists."""
+    portfolio = portfolio or session.scalar(
+        select(Portfolio).where(Portfolio.name == PORTFOLIO_NAME)
+    )
     if portfolio is None:
         return None
-    cfg = RiskConfig.from_settings(settings)
+    cfg = cfg or RiskConfig.from_settings(settings)
     state = load_state(session, portfolio, cfg, now)
     equity = state.equity
     return {

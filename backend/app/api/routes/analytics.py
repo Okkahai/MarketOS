@@ -10,9 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.analytics import metrics
+from app.analytics.portfolio import performance
 from app.db.session import get_db
-from app.market.compute import INTERVAL, PRIMARY_PROVIDER
-from app.market.repository import get_bars
 from app.models import (
     Asset,
     PerformanceEvaluation,
@@ -25,7 +24,6 @@ from app.trading.state import PORTFOLIO_NAME
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
 Db = Annotated[Session, Depends(get_db)]
-BENCHMARKS = ("SPY", "BTC-USD")
 NOTES = (
     "Daily returns, 365 days a year, risk-free rate 0. Snapshots with a missing price are skipped."
 )
@@ -64,61 +62,25 @@ class SummaryOut(BaseModel):
     notes: str
 
 
-def _daily_values(snaps: list[PortfolioSnapshot]) -> list[tuple[datetime, float]]:
-    """Last complete snapshot of each UTC day."""
-    by_day: dict[Any, tuple[datetime, float]] = {}
-    for s in snaps:
-        if s.complete and s.total_value is not None:
-            by_day[s.as_of.date()] = (s.as_of, float(s.total_value))
-    return [by_day[d] for d in sorted(by_day)]
-
-
-def _close_at(session: Session, symbol: str, ts: datetime) -> float | None:
-    asset = session.scalar(select(Asset).where(Asset.symbol == symbol))
-    if asset is None:
-        return None
-    bars = get_bars(session, asset.id, INTERVAL, PRIMARY_PROVIDER[asset.asset_class], ts, 1)
-    return float(bars[-1].close) if bars else None
-
-
 @router.get("/summary", response_model=SummaryOut)
 def summary(session: Db) -> SummaryOut:
     p = session.scalar(select(Portfolio).where(Portfolio.name == PORTFOLIO_NAME))
-    daily: list[tuple[datetime, float]] = []
-    incomplete = 0
+    snaps: list[PortfolioSnapshot] = []
     if p:
-        snaps = session.scalars(
-            select(PortfolioSnapshot)
-            .where(PortfolioSnapshot.portfolio_id == p.id)
-            .order_by(PortfolioSnapshot.as_of)
-        ).all()
-        incomplete = sum(1 for s in snaps if not s.complete)
-        daily = _daily_values(list(snaps))
-    values = [v for _, v in daily]
-    rets = metrics.daily_returns(values)
-    portfolio = {
-        "days": len(values), "start": daily[0][0] if daily else None,
-        "end": daily[-1][0] if daily else None,
-        "start_value": values[0] if values else None, "end_value": values[-1] if values else None,
-        "return_pct": metrics.total_return_pct(values),
-        "max_drawdown_pct": metrics.max_drawdown_pct(values),
-        "sharpe": metrics.sharpe(rets), "sortino": metrics.sortino(rets),
-        "incomplete_snapshots": incomplete,
-    }  # fmt: skip
-
-    benchmarks = []
-    for sym in BENCHMARKS:
-        ret = None
-        if len(daily) >= 2:
-            a, b = _close_at(session, sym, daily[0][0]), _close_at(session, sym, daily[-1][0])
-            ret = (b / a - 1) * 100 if a and b else None
-        benchmarks.append({"symbol": sym, "return_pct": ret})
-    benchmarks.append({"symbol": "CASH", "return_pct": 0.0 if len(daily) >= 2 else None})
+        snaps = list(
+            session.scalars(
+                select(PortfolioSnapshot)
+                .where(PortfolioSnapshot.portfolio_id == p.id)
+                .order_by(PortfolioSnapshot.as_of)
+            )
+        )
+    portfolio, benchmarks = performance(session, snaps)
 
     closed = session.execute(
         select(Position, Asset.symbol)
         .join(Asset, Asset.id == Position.asset_id)
-        .where(Position.closed_at.is_not(None))
+        .join(Portfolio, Portfolio.id == Position.portfolio_id)
+        .where(Position.closed_at.is_not(None), Portfolio.mode == "live_paper")
         .order_by(Position.closed_at.desc())
     ).all()
     closed_out = [

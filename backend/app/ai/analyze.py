@@ -39,6 +39,14 @@ DIRECTION = {
 }  # fmt: skip
 
 
+@dataclass(frozen=True, slots=True)
+class Replay:
+    """Marks a backtest: signals are journalled to the run, and no earlier answer is reused, so a
+    replay always regenerates what the analyst would have said with only the data of its time."""
+
+    backtest_run_id: uuid.UUID
+
+
 class StopRun(Exception):
     """Ends the run early with a reason (budget reached, provider refused our key)."""
 
@@ -145,8 +153,11 @@ def _process_event(
     context: dict[str, Any],
     now: datetime,
     t: Tally,
+    replay: Replay | None = None,
 ) -> None:
-    triage = _call(session, settings, llm, ctx, event_id, context, now, "triage", TriageResult, t)
+    triage = _call(
+        session, settings, llm, ctx, event_id, context, now, "triage", TriageResult, t, replay
+    )
     if triage is None:
         return
     result, _ = triage
@@ -160,13 +171,13 @@ def _process_event(
             "candidate_assets": [a for a in context["candidate_assets"] if a["symbol"] in keep],
         }
     analysis = _call(
-        session, settings, llm, ctx, event_id, context, now, "analysis", AnalysisResult, t
+        session, settings, llm, ctx, event_id, context, now, "analysis", AnalysisResult, t, replay
     )
     if analysis is None:
         return
     result, analysis_id = analysis
     t.analysed += 1
-    _store_signals(session, analysis_id, result, context, now, t)
+    _store_signals(session, analysis_id, result, context, now, t, replay)
 
 
 def _call(
@@ -180,14 +191,19 @@ def _call(
     stage: str,
     schema_cls: type[BaseModel],
     t: Tally,
+    replay: Replay | None = None,
 ) -> tuple[Any, uuid.UUID | None] | None:
     """One model call, stored. Returns (validated result, analysis id) or None on any failure."""
     model = settings.ai_triage_model if stage == "triage" else settings.ai_analysis_model
     key = request_hash(stage, model, prompts.PROMPT_VERSION, context)
-    cached = session.scalar(
-        select(AiAnalysis)
-        .where(AiAnalysis.request_hash == key, AiAnalysis.validation_status == "valid")
-        .limit(1)
+    cached = (
+        None
+        if replay
+        else session.scalar(
+            select(AiAnalysis)
+            .where(AiAnalysis.request_hash == key, AiAnalysis.validation_status == "valid")
+            .limit(1)
+        )
     )
     if cached is not None:
         t.cache_hits += 1
@@ -270,6 +286,7 @@ def _store_signals(
     context: dict[str, Any],
     now: datetime,
     t: Tally,
+    replay: Replay | None = None,
 ) -> None:
     assets = {a.symbol: a for a in session.scalars(select(Asset))}
     prices = {a["symbol"]: a for a in context["candidate_assets"]}
@@ -298,7 +315,8 @@ def _store_signals(
                 suggested_stop_loss_pct=s.suggested_stop_loss_pct,
                 suggested_take_profit_pct=s.suggested_take_profit_pct,
                 portfolio_context=context["portfolio"],
-                mode="live_paper",
+                mode="backtest" if replay else "live_paper",
+                backtest_run_id=replay.backtest_run_id if replay else None,
             )  # fmt: skip
         )
         t.signals += 1

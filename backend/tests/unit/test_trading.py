@@ -118,7 +118,7 @@ def test_non_trading_actions_are_recorded_as_rejected():
 def test_stale_price_and_unpriced_portfolio_block_entries():
     old = signal(reference_price_ts=NOW - timedelta(hours=101))
     rejected_by(evaluate(old, state(), CFG, NOW), "price_fresh")
-    stale_crypto = signal(cls="crypto", reference_price_ts=NOW - timedelta(hours=37))
+    stale_crypto = signal(cls="crypto", reference_price_ts=NOW - timedelta(hours=55))
     rejected_by(evaluate(stale_crypto, state(), CFG, NOW), "price_fresh")
     rejected_by(evaluate(signal(), state(equity=None), CFG, NOW), "data_complete")
 

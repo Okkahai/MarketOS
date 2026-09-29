@@ -86,7 +86,8 @@ def decide(
     signals = session.scalars(
         select(Signal)
         .where(
-            Signal.mode == "live_paper",
+            Signal.mode == portfolio.mode,
+            Signal.backtest_run_id.is_not_distinct_from(portfolio.backtest_run_id),
             Signal.generated_at >= portfolio.created_at,
             Signal.generated_at <= now,
             ~decided,
@@ -202,13 +203,19 @@ def check_exits(
             break
 
 
-def take_snapshot(session: Session, portfolio: Portfolio, cfg: RiskConfig, now: datetime) -> bool:
+def take_snapshot(
+    session: Session,
+    portfolio: Portfolio,
+    cfg: RiskConfig,
+    now: datetime,
+    every: timedelta = SNAPSHOT_EVERY,
+) -> bool:
     last = session.scalar(
         select(func.max(PortfolioSnapshot.as_of)).where(
             PortfolioSnapshot.portfolio_id == portfolio.id
         )
     )
-    if last is not None and now - last < SNAPSHOT_EVERY:
+    if last is not None and now - last < every:
         return False
     val = valuation(session, portfolio, cfg, now)
     details: list[dict[str, Any]] = [
@@ -236,6 +243,22 @@ def take_snapshot(session: Session, portfolio: Portfolio, cfg: RiskConfig, now: 
     return True
 
 
+def paper_step(
+    session: Session,
+    portfolio: Portfolio,
+    cfg: RiskConfig,
+    now: datetime,
+    t: Tally,
+    snapshot_every: timedelta = SNAPSHOT_EVERY,
+) -> None:
+    """One pass at time `now`: exits, verdicts for new signals, fills, then a value snapshot.
+    The live job and the backtest both run exactly this."""
+    check_exits(session, portfolio, cfg, now, t)
+    decide(session, portfolio, cfg, now, t)
+    fill_pending(session, portfolio, cfg, now, t)
+    t.snapshot = take_snapshot(session, portfolio, cfg, now, snapshot_every)
+
+
 def run_paper_cycle(
     session_factory: sessionmaker[Session], settings: Settings, *, clock: Clock | None = None
 ) -> uuid.UUID:
@@ -246,10 +269,7 @@ def run_paper_cycle(
         t = Tally()
         with session_factory() as session:
             portfolio = ensure_portfolio(session, settings, now)
-            check_exits(session, portfolio, cfg, now, t)
-            decide(session, portfolio, cfg, now, t)
-            fill_pending(session, portfolio, cfg, now, t)
-            t.snapshot = take_snapshot(session, portfolio, cfg, now)
+            paper_step(session, portfolio, cfg, now, t)
         ctx.items_written = t.filled + t.exits
         ctx.details = t.__dict__.copy()
         return ctx.run_id

@@ -49,6 +49,9 @@ class Portfolio(Base):
     mode: Mapped[str] = mapped_column(String(10), nullable=False, server_default="live_paper")
     starting_capital: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     cash: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    backtest_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("backtest_runs.id", ondelete="RESTRICT")
+    )
     created_at: Mapped[datetime] = _now()
 
 
