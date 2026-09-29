@@ -70,6 +70,7 @@ class Settings(BaseSettings):
     schedule_ai_seconds: int = Field(default=900, ge=60)
     schedule_paper_seconds: int = Field(default=300, ge=60)
     schedule_reconcile_seconds: int = Field(default=3600, ge=60)
+    schedule_evaluate_seconds: int = Field(default=3600, ge=60)
 
     # Market data collection
     market_history_days: int = Field(default=400, ge=30, le=3650)

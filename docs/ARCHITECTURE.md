@@ -663,7 +663,7 @@ Each phase ends with passing tests, a PR, and an update to this document if a de
 | **5. AI analysis** (done) | context builder, LLM client, schemas | `context_snapshots`, `ai_analyses`, `signals`, triage + main model, cost tracking, cache | lookahead test on snapshots; schema rejection tests |
 | **6. Paper trading** (done) | risk engine, fills, ledger, positions | `risk_decisions`, `trades`, `cash_ledger`, `positions`, immutability triggers, reconciliation | accounting, sizing and risk-rule tests |
 | **7. Dashboard** (done) | overview, portfolio, trades, journal, asset detail | signal trace endpoint and the pages listed in the product brief | every position explainable in two clicks |
-| **8. Analytics** | snapshots, evaluations, metrics, benchmarks | `portfolio_snapshots`, `performance_evaluations`, analytics page | metric tests against hand-computed fixtures |
+| **8. Analytics** (done) | snapshots, evaluations, metrics, benchmarks | `portfolio_snapshots`, `performance_evaluations`, analytics page | metric tests against hand-computed fixtures |
 | **9. Backtesting** | replay clock, historical runs | `ReplayClock`, backtest runner, isolated portfolios | chronology tests: no row read with `available_at > clock` |
 | **10. Hardening** | resilience and ops | provider fallback, monitoring page, alerting, security review, load of 6 months of history | failure-injection tests |
 
@@ -791,6 +791,24 @@ Left out on purpose:
 - **Charts of portfolio value and drawdown** arrive with Phase 8, where the metrics that go with them are computed.
 - **Trade markers on the price chart.** The asset page lists recommendations and trades beside the chart instead.
 - **Live refresh.** Pages are server-rendered on each load; there is no websocket push.
+
+### Phase 8 notes: what was built and what was left out
+
+Built: `performance_evaluations` (append-only, one row per signal and horizon of 1d, 3d, 7d, 30d), an hourly `evaluate_signals` job, pure metric functions (`app/analytics/metrics.py`), `GET /api/v1/analytics/summary` and `/analytics/evaluations`, and the Analytics page: portfolio return, max drawdown, Sharpe and Sortino against SPY, BTC and cash over the same window, closed-position statistics (win rate, profit factor, expectancy, wins and losses in one list), and hit rate per horizon with the wrong calls listed beside the right ones.
+
+Behaviour worth knowing:
+
+- **Start and end.** Start is `signals.reference_price`, the last close the model saw. End is the last completed daily close inside the horizon (`bar.ts + 1 day <= generated_at + horizon`) among bars available when the job runs. MFE and MAE come from the daily highs and lows in between, clamped at zero. The benchmark is SPY for stocks and ETFs and BTC-USD for crypto, over the same bars; excess return is the difference.
+- **Written once.** A horizon is evaluated only after it has fully elapsed and only if daily bars reach within four days of its end. Otherwise nothing is written and the next run tries again; a number is never estimated. Because rows are immutable, a bar revision after evaluation does not change them.
+- **Direction.** BUY and STRONG_BUY are right if the return is above 0; SELL, REDUCE and AVOID if below 0; HOLD makes no claim (null). A flat result is wrong for a directional call.
+- **Portfolio metrics** use the last complete snapshot of each UTC day, daily returns, 365 days a year, risk-free rate 0. Snapshots with a missing price are counted and skipped.
+
+Left out on purpose:
+
+- **Start price is the model's last close, not the fill.** For a signal made on a Monday evening it is the previous Friday's close, so the return includes a move the system could not have traded. Compare it with the benchmark over the identical window rather than reading it as trade P&L; the paper trades themselves fill at the next open.
+- **Statistical significance.** No confidence intervals; with a handful of signals the hit rate is noise, and the page says so.
+- **Per-model and per-category breakdowns**, **calibration curves** and **factor attribution.** The rows carry what is needed to add them.
+- **A daily report job.** The page computes on request; nothing is precomputed.
 
 ### Future extension points (not in the MVP)
 

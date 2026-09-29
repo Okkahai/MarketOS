@@ -17,7 +17,8 @@ The full design, including the database schema, provider choices, accounting rul
 | 5 | AI analysis: context builder, triage + analysis models, validated signals journal, cost budget, AI journal page | done, needs a live run with `ANTHROPIC_API_KEY` and `AI_MODEL_PRICES` |
 | 6 | Paper trading: risk engine, fills, ledger, positions, reconciliation, Portfolio and Trades pages | done, simulation only |
 | 7 | Dashboard: Overview page, signal trace (signal to risk verdict to trades), links everywhere | done |
-| 8–10 | Analytics, backtesting, hardening | planned |
+| 8 | Analytics: signal evaluations, portfolio metrics against SPY, BTC and cash, Analytics page | done |
+| 9–10 | Backtesting, hardening | planned |
 
 ## Run with Docker
 
