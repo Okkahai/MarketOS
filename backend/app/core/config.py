@@ -31,6 +31,33 @@ class Settings(BaseSettings):
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:3000"]
 
     paper_initial_capital: Decimal = Field(default=Decimal("10000"), gt=0)
+    # Paper trading rules. Percentages are of total portfolio value unless noted.
+    paper_min_confidence: Decimal = Field(default=Decimal("0.60"), ge=0, le=1)
+    paper_strong_buy_min_confidence: Decimal = Field(default=Decimal("0.75"), ge=0, le=1)
+    paper_max_position_pct: Decimal = Field(default=Decimal("10"), gt=0, le=100)
+    paper_max_sector_pct: Decimal = Field(default=Decimal("30"), gt=0, le=100)
+    paper_max_crypto_pct: Decimal = Field(default=Decimal("25"), ge=0, le=100)
+    paper_min_cash_pct: Decimal = Field(default=Decimal("10"), ge=0, le=100)
+    paper_max_open_positions: int = Field(default=8, ge=1)
+    paper_min_trade_usd: Decimal = Field(default=Decimal("50"), ge=0)
+    paper_default_position_pct: Decimal = Field(default=Decimal("4"), gt=0, le=100)
+    paper_cooldown_hours: int = Field(default=24, ge=0)
+    paper_max_trades_per_day: int = Field(default=5, ge=1)
+    paper_default_stop_pct: Decimal = Field(default=Decimal("8"), gt=0, le=100)
+    paper_max_stop_pct: Decimal = Field(default=Decimal("10"), gt=0, le=100)
+    paper_max_take_profit_pct: Decimal = Field(default=Decimal("30"), gt=0)
+    paper_drawdown_breaker_pct: Decimal = Field(default=Decimal("20"), gt=0, le=100)
+    paper_order_expiry_hours: int = Field(default=72, ge=1)
+    # A daily bar is the freshest price the model sees; these ages allow a weekend or holiday.
+    paper_max_price_age_hours_stock: int = Field(default=100, ge=1)
+    paper_max_price_age_hours_crypto: int = Field(default=36, ge=1)
+    paper_slippage_bps_stock: Decimal = Field(default=Decimal("5"), ge=0)
+    paper_slippage_bps_crypto: Decimal = Field(default=Decimal("10"), ge=0)
+    paper_fee_bps_stock: Decimal = Field(default=Decimal("0"), ge=0)
+    paper_fee_bps_crypto: Decimal = Field(default=Decimal("40"), ge=0)
+    paper_min_fee: Decimal = Field(default=Decimal("0"), ge=0)
+    # Bars that supply crypto fill prices: "1m" live, "1d" for daily backtests.
+    paper_crypto_fill_interval: Literal["1m", "1d"] = "1m"
     base_currency: str = Field(default="USD", pattern=r"^[A-Z]{3}$")
 
     schedule_heartbeat_seconds: int = Field(default=60, ge=10)
@@ -41,6 +68,8 @@ class Settings(BaseSettings):
     schedule_news_seconds: int = Field(default=900, ge=60)
     schedule_events_seconds: int = Field(default=600, ge=60)
     schedule_ai_seconds: int = Field(default=900, ge=60)
+    schedule_paper_seconds: int = Field(default=300, ge=60)
+    schedule_reconcile_seconds: int = Field(default=3600, ge=60)
 
     # Market data collection
     market_history_days: int = Field(default=400, ge=30, le=3650)

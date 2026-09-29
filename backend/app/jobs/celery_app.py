@@ -51,6 +51,14 @@ celery_app.conf.update(
             "task": "marketos.ai_analysis",
             "schedule": float(settings.schedule_ai_seconds),
         },
+        "paper_cycle": {
+            "task": "marketos.paper_cycle",
+            "schedule": float(settings.schedule_paper_seconds),
+        },
+        "reconcile": {
+            "task": "marketos.reconcile",
+            "schedule": float(settings.schedule_reconcile_seconds),
+        },
         "compute_indicators": {
             "task": "marketos.compute_indicators",
             "schedule": float(settings.schedule_indicators_seconds),

@@ -8,8 +8,8 @@ const NAV: { label: string; href?: string; phase?: number }[] = [
   { label: "News feed", href: "/news" },
   { label: "Events", href: "/events" },
   { label: "Market", href: "/market" },
-  { label: "Portfolio", phase: 6 },
-  { label: "Trades", phase: 6 },
+  { label: "Portfolio", href: "/portfolio" },
+  { label: "Trades", href: "/trades" },
   { label: "AI journal", href: "/journal" },
   { label: "Analytics", phase: 8 },
 ];

@@ -162,7 +162,12 @@ def _past_events(
     return out
 
 
-def build_context(session: Session, event_id: uuid.UUID, as_of: datetime) -> dict[str, Any] | None:
+def build_context(
+    session: Session,
+    event_id: uuid.UUID,
+    as_of: datetime,
+    portfolio: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
     """The model input for one event, or None when the event did not exist yet at as_of."""
     state = state_as_of(session, event_id, as_of)
     event = session.get(Event, event_id)
@@ -205,7 +210,7 @@ def build_context(session: Session, event_id: uuid.UUID, as_of: datetime) -> dic
             "articles": articles,
         },
         "candidate_assets": candidates,
-        "portfolio": None,  # arrives with the paper portfolio (Phase 6)
+        "portfolio": portfolio,  # None until a paper portfolio exists
         "related_past_events": _past_events(session, event, linked, assets, as_of),
         "market_regime": _regime(session, as_of),
     }
