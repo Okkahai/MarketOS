@@ -140,6 +140,10 @@ API_INTERNAL_URL=http://localhost:8000 npm run dev
 
 The backend reads `backend/.env`.
 
+### Run it 24/7 on a server
+
+[docs/DEPLOY.md](docs/DEPLOY.md) walks through a small Hetzner server with backups. The dashboard has no login, so it is reached through an SSH tunnel.
+
 ### Run a backtest
 
 ```bash
