@@ -42,8 +42,8 @@ class PortfolioState:
     peak_equity: Decimal
     holdings: dict[str, Holding]  # by asset_id
     pending_buys: dict[str, Pending]  # by asset_id
-    last_trade_at: dict[str, datetime]  # asset_id -> latest trade
-    trades_today: int
+    last_trade_at: dict[str, datetime]  # asset_id -> latest order, by decision time
+    trades_today: int  # signal orders decided today (UTC), pending or filled
 
     def summary(self) -> dict[str, Any]:
         return {

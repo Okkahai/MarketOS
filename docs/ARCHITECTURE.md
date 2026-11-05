@@ -391,7 +391,7 @@ Append-only, like the snapshots. A repeated identical request is not stored agai
 
 **performance_evaluations** (append-only; one row per signal per horizon)
 
-`signal_id, horizon (1d|3d|7d|30d), evaluated_at, start_price, start_price_ts, end_price, end_price_ts, return_pct, mfe_pct, mae_pct, benchmark_return_pct, excess_return_pct, direction_correct bool null, status (complete|insufficient_data|pending)`. Only bars with `available_at > signal.generated_at` and `ts <= generated_at + horizon` are used.
+`signal_id, horizon (1d|3d|7d|30d), evaluated_at, start_price, end_price, end_price_ts, return_pct, mfe_pct, mae_pct, benchmark_symbol, benchmark_return_pct, excess_return_pct, direction_correct bool null`. There is no `status` column and no `start_price_ts`: a horizon that cannot be judged yet simply has no row (see Phase 8 notes). The start is the signal's `reference_price` (last close seen), and the window uses daily bars with `ts > reference_price_ts` and `ts + 1 day <= generated_at + horizon`, available when the job runs. Terminal statuses (`insufficient_data`) are planned for evaluation v2 (audit 2026-11-05, M2).
 
 **system_runs** (every job execution, success or failure)
 
@@ -599,8 +599,8 @@ The risk engine is a list of pure functions `rule(signal, portfolio_state, marke
 | 7 | Minimum cash reserve | 10% | resize down / reject |
 | 8 | Max open positions | 8 | reject new opens |
 | 9 | Position size | `min(signal suggested %, rule 4 cap)`; minimum trade 50 USD | reject if below minimum |
-| 10 | Cooldown | 24 h between trades in the same asset, both directions | reject |
-| 11 | Max new trades per day | 5 | reject |
+| 10 | Cooldown | 24 h between orders in the same asset, both directions, by decision time; pending orders count | reject |
+| 11 | Max new trades per day | 5 signal orders decided per UTC day, pending or filled | reject |
 | 12 | Stop-loss | required on every entry; `min(signal %, 10%)`, default 8% | set on position |
 | 13 | Take-profit | optional; signal % capped at 30% | set on position |
 | 14 | Drawdown circuit breaker | if portfolio is 20% below its peak, stop new entries (exits still allowed) | reject |
@@ -641,7 +641,7 @@ The MVP is accepted when all of these are demonstrably true on a running Docker 
 
 **Evaluation and analytics**
 
-- [ ] Every signal older than its horizon has 1d/3d/7d evaluations with MFE/MAE, or an explicit `insufficient_data` status.
+- [ ] Every signal older than its horizon has 1d/3d/7d evaluations with MFE/MAE, or an explicit `insufficient_data` status. Not met: weekend and holiday 1d windows and data gaps leave no row and no status (audit F3, planned for M2).
 - [ ] Dashboard shows portfolio vs. SPY vs. BTC vs. cash, win rate, profit factor, max drawdown, Sharpe and Sortino, and shows losing trades and wrong predictions in the same lists as winning ones.
 
 **Explainability**
@@ -769,10 +769,10 @@ Built: a risk engine (`app/trading/risk.py`, pure, every rule recorded in `risk_
 Behaviour worth knowing:
 
 - **Every signal gets a verdict**, one per portfolio (unique on signal and portfolio), with the rules checked, the portfolio state and the config that applied. HOLD and AVOID are recorded as rejected ("does not open or close a position"). SELL closes the whole position, REDUCE sells half. Exits are not blocked by confidence, cooldown or the drawdown breaker; those apply to entries only.
-- **Fill rule.** An order made at decision time t fills at the open of the first bar that opens strictly after t and is already available. Stocks: the next 09:30 New York open (a daily bar dated D opens at 09:30 on D and becomes available at 20:00 on D, so it is filled on the next cycle after that). Crypto: the next `PAPER_CRYPTO_FILL_INTERVAL` bar (`1m` by default). No bar means the order waits, then expires after `PAPER_ORDER_EXPIRY_HOURS`; it is never filled at a guess. Slippage is adverse (`PAPER_SLIPPAGE_BPS_*`), fees are `max(min_fee, gross x bps / 10,000)`, quantities round down (6 places stock, 8 crypto), money is quantised to 8 places half-even.
+- **Fill rule.** An order made at decision time t fills at the open of the first bar that opens strictly after t and is already available. Stocks: the next 09:30 New York open (a daily bar dated D opens at 09:30 on D and becomes available at 20:00 on D, so it is filled on the next cycle after that). Crypto: the next `PAPER_CRYPTO_FILL_INTERVAL` bar (`1m` by default). No bar means the order waits, then expires after `PAPER_ORDER_EXPIRY_HOURS`; it is never filled at a guess. Since `risk-2`, a bar is eligible only if it opens before `expires_at`, so an order cannot fill after its window even when the worker was down across the expiry. Slippage is adverse (`PAPER_SLIPPAGE_BPS_*`), fees are `max(min_fee, gross x bps / 10,000)`, quantities round down (6 places stock, 8 crypto), money is quantised to 8 places half-even.
 - **Cash.** Cash is never negative: pending buys reserve cash and count against the position, sector and crypto limits before they fill, the execution path re-checks, and the database has `CHECK (cash >= 0)` on the portfolio and `balance_after >= 0` on the ledger.
 - **Sizing.** Requested size is the model's suggestion, else `PAPER_DEFAULT_POSITION_PCT`, capped at `PAPER_MAX_POSITION_PCT`; then room under the position, sector, crypto and cash-reserve limits shrinks it (the smallest wins); below `PAPER_MIN_TRADE_USD` it is rejected. Stops default to `PAPER_DEFAULT_STOP_PCT` and are capped at `PAPER_MAX_STOP_PCT`; take-profit is capped at `PAPER_MAX_TAKE_PROFIT_PCT`.
-- **Stops and targets** are checked on completed daily bars that open after the last entry: a gap through the stop fills at the open, a target fills at the target (or the open if it gapped past), and a bar that touches both counts as a stop. The exit trade is stamped with the bar's `available_at`, the moment the engine could have known.
+- **Stops and targets** are checked on completed daily bars from the last entry on. A fill at the open is that session's first print, so the fill bar's low and high happened at or after the entry and the bar is checked too (positions opened under `risk-2`; positions opened under `risk-1` keep the old rule of bars strictly after the entry, so nothing is stopped out retroactively). What daily bars cannot tell is the order of the low and the high, hence the pessimistic rule below. A crypto position fills on a 1m bar, but exits are checked on daily bars, and the daily bar containing the entry also contains pre-entry prices, so the rest of the crypto entry day is not checked (audit L7). a gap through the stop fills at the open, a target fills at the target (or the open if it gapped past), and a bar that touches both counts as a stop. The exit trade is stamped with the bar's `available_at`, the moment the engine could have known.
 - **Immutability.** `trades`, `cash_ledger`, `risk_decisions` and `portfolio_snapshots` reject UPDATE and DELETE by trigger. `orders` and `positions` are the only mutable tables; `positions` is derived state.
 - **Reconciliation** replays the ledger (running balance against `balance_after` and `portfolio.cash`) and the trades (average cost, cost basis and realised P&L against `positions`). Any difference makes the `reconcile` run `failed` with the issues listed; nothing is silently corrected.
 - `portfolio_snapshots.total_value` is null when a position had no price; an incomplete valuation is recorded as such.
@@ -846,6 +846,23 @@ Left out on purpose:
 - **Auth on the API and a Redis-shared rate limiter.** Not needed while everything is bound to `127.0.0.1` and single-user; both are required before exposing the app.
 - **The 6-month history load test.** History is only what the providers return for the free keys, and the live keys have not been used yet.
 - **Auto-healing stuck runs.** They are reported, not rewritten, since `system_runs` is an audit trail.
+
+### Audit 2026-11-05: what M1 changed and what is still open
+
+The audit is in the project files (`marketos/audit/AUDIT-2026-11-05.md`). M1 fixed, without a migration and without changing any stored row:
+
+- **F4 order expiry.** A pending order fills only on a bar that opens before `expires_at`; otherwise it expires.
+- **F2 evaluation queue.** `evaluate_signals` selects signals with a due horizon that has no row (`NOT EXISTS`), in keyset pages of `PER_RUN` by `(generated_at, id)`, and walks all pages each run. Signals that can never be judged stay in the queue but no longer block newer ones.
+- **F6 entry-bar exits.** For positions whose opening decision has `engine_version` `risk-2`, the fill bar is checked for the stop and target (see Phase 6 notes).
+- **F5 risk counters (partial).** Cooldown and the daily cap count orders, pending and filled, by decision time (`orders.signal_time`), not trades by their back-dated `executed_at`.
+- **F8 analytics.** Prediction averages are signed by the call (a correct AVOID is a gain), HOLD is left out of them, signals on the benchmark itself are left out of the excess average, and each horizon is broken down by action. The UI labels a signal's confidence "score (uncalibrated)".
+- `ENGINE_VERSION` is now `risk-2`; decisions recorded before keep `risk-1`.
+
+Still open, so read today's numbers with care:
+
+- **F1, the most important one.** Evaluations still start at the last close the analyst saw, so a move that finished before the decision is credited to the signal. Current hit rates and averages do not show skill. Fix: evaluation v2 in a new table with a session calendar (M2).
+- **F3** weekend and holiday 1d windows, no terminal statuses; **F5 in full** (`price_available_at` and `recorded_at` on trades, so "the book as of T" is reconstructible); **F7** corporate actions (raw prices, splits fire false stops); **F9** calendar-unaware price freshness; **F10** non-point-in-time past events in context snapshots; **F11** backtest and live select events differently; the crypto entry day (L7).
+- An expired order has no expiry timestamp of its own; its effective time is `expires_at`.
 
 ### Future extension points (not in the MVP)
 

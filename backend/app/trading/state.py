@@ -19,7 +19,6 @@ from app.models import (
     Portfolio,
     PortfolioSnapshot,
     Position,
-    Trade,
 )
 from app.trading.risk import Holding, Pending, PortfolioState
 from app.trading.rules import RiskConfig, fill_interval
@@ -115,24 +114,26 @@ def load_state(
             .group_by(Asset.id)
         )
     }
+    # Cooldown and the daily cap count orders (pending and filled) by decision time: a fill is
+    # stamped at the bar's open but only written once the bar is available, often the next day.
+    acted = (
+        Order.portfolio_id == portfolio.id,
+        Order.status.in_(("pending", "filled")),
+        Order.signal_time <= now,
+    )
     last = {
         str(a): t
         for a, t in session.execute(
-            select(Trade.asset_id, func.max(Trade.executed_at))
-            .where(Trade.portfolio_id == portfolio.id, Trade.executed_at <= now)
-            .group_by(Trade.asset_id)
+            select(Order.asset_id, func.max(Order.signal_time))
+            .where(*acted)
+            .group_by(Order.asset_id)
         )
     }
     day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     trades_today = session.scalar(
         select(func.count())
-        .select_from(Trade)
-        .where(
-            Trade.portfolio_id == portfolio.id,
-            Trade.executed_at >= day_start,
-            Trade.executed_at <= now,
-            Trade.reason == "signal",
-        )
+        .select_from(Order)
+        .where(*acted, Order.signal_time >= day_start, Order.reason == "signal")
     )
     peak = session.scalar(
         select(func.max(PortfolioSnapshot.total_value)).where(

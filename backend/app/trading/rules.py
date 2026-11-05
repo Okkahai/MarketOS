@@ -16,7 +16,7 @@ BPS = Decimal(10_000)
 NEW_YORK = ZoneInfo("America/New_York")
 STOCK_OPEN = time(9, 30)
 QUANTITY_PLACES = {"stock": 6, "etf": 6, "crypto": 8}
-ENGINE_VERSION = "risk-1"
+ENGINE_VERSION = "risk-2"  # risk-2: expiry before fill, entry-bar exits, counters by decision
 
 
 @dataclass(frozen=True, slots=True)

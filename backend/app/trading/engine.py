@@ -57,9 +57,16 @@ class Tally:
 
 
 def bars_after(
-    session: Session, asset: Asset, interval: str, after: datetime, now: datetime, limit: int
+    session: Session,
+    asset: Asset,
+    interval: str,
+    after: datetime,
+    now: datetime,
+    limit: int,
+    inclusive: bool = False,
 ) -> list[MarketPrice]:
-    """Bars (latest revision known at `now`) that open strictly after `after`, oldest first."""
+    """Bars (latest revision known at `now`) that open after `after` (or at it, if inclusive),
+    oldest first."""
     floor = after if asset.asset_class == "crypto" else after - timedelta(days=2)
     rows = session.scalars(
         select(MarketPrice)
@@ -74,7 +81,8 @@ def bars_after(
         .order_by(MarketPrice.ts, MarketPrice.revision.desc())
         .limit(limit + 3)
     ).all()
-    return [b for b in rows if session_open(b.ts, asset.asset_class) > after][:limit]
+    opens = [(b, session_open(b.ts, asset.asset_class)) for b in rows]
+    return [b for b, o in opens if o > after or (inclusive and o == after)][:limit]
 
 
 def decide(
@@ -159,7 +167,8 @@ def fill_pending(
         bars = bars_after(
             session, asset, fill_interval(cfg, asset.asset_class), order.signal_time, now, 1
         )
-        if bars:
+        opens = session_open(bars[0].ts, asset.asset_class) if bars else None
+        if opens is not None and opens < order.expires_at:
             bar = bars[0]
             trade = execute_order(
                 session, order, asset, cfg, bar.open, bar.ts,
@@ -167,7 +176,8 @@ def fill_pending(
             )  # fmt: skip
             t.filled += trade is not None
             t.expired += trade is None
-        elif order.expires_at <= now:
+        elif opens is not None or order.expires_at <= now:
+            # the first bar after the decision opens at or past expiry: never fill outside it
             order.status = "expired"
             session.commit()
             t.expired += 1
@@ -176,12 +186,24 @@ def fill_pending(
 def check_exits(
     session: Session, portfolio: Portfolio, cfg: RiskConfig, now: datetime, t: Tally
 ) -> None:
-    """Stop-loss and take-profit on completed daily bars after the last entry. Both hit in one
-    bar: the stop wins (the pessimistic reading)."""
+    """Stop-loss and take-profit on completed daily bars from the last entry on. Both hit in one
+    bar: the stop wins (the pessimistic reading).
+
+    Positions opened under risk-2 or later also check the bar whose open was the entry: a fill at
+    the open is that session's first print, so its low and high came at or after the entry.
+    Positions opened under risk-1 keep the old rule (bars strictly after the entry), so no past
+    position is stopped out retroactively."""
     for pos, asset in open_positions(session, portfolio.id):
         if pos.stop_price is None and pos.target_price is None:
             continue
-        for bar in bars_after(session, asset, INTERVAL, pos.last_entry_at, now, 400):
+        opened_under = session.scalar(
+            select(RiskDecision.engine_version).where(
+                RiskDecision.signal_id == pos.signal_id,
+                RiskDecision.portfolio_id == portfolio.id,
+            )
+        )
+        inclusive = opened_under not in (None, "risk-1")
+        for bar in bars_after(session, asset, INTERVAL, pos.last_entry_at, now, 400, inclusive):
             hit = None
             if pos.stop_price is not None:
                 ref = stop_fill(bar.open, bar.low, pos.stop_price)

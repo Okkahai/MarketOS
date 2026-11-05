@@ -31,6 +31,11 @@ export function formatDecimalString(value: string, min = 2, max = 8): string {
   return frac ? `${sign}${grouped}.${frac}` : `${sign}${grouped}`;
 }
 
+// A signal's confidence is a rules score, not a measured probability; say so wherever it shows.
+export function formatScore(value: string): string {
+  return `score ${formatDecimalString(value, 2, 2)} (uncalibrated)`;
+}
+
 // "3.3000" -> "+3.30%". The sign is always shown so direction never depends on colour alone.
 export function formatSignedPercent(value: string): string {
   const text = formatDecimalString(value, 2, 2);

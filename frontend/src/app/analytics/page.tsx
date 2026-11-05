@@ -207,14 +207,20 @@ function Predictions({ s }: { s: AnalyticsSummary }) {
   return (
     <section className="card table-scroll">
       <h2>How often the AI was right</h2>
+      <p className="muted small">
+        Returns are signed by the call: a correct SELL or AVOID counts as a gain, HOLD is left out.
+        Signals on the benchmark itself are left out of the benchmark column. Measured from the last
+        close the analyst saw, so moves that finished before the decision are still credited (audit
+        2026-11-05, F1, not fixed yet): do not read these numbers as proof of skill.
+      </p>
       <table>
         <thead>
           <tr>
             <th>Horizon</th>
             <th className="num">Judged</th>
             <th className="num">Hit rate</th>
-            <th className="num">Avg return</th>
-            <th className="num">Avg vs benchmark</th>
+            <th className="num">Avg signed return</th>
+            <th className="num">Avg signed vs benchmark</th>
           </tr>
         </thead>
         <tbody>
@@ -225,8 +231,8 @@ function Predictions({ s }: { s: AnalyticsSummary }) {
               <td className="num">
                 {p.hit_rate === null ? "—" : `${(p.hit_rate * 100).toFixed(0)}% of ${p.directional}`}
               </td>
-              <td className="num">{signed(p.avg_return_pct, "%")}</td>
-              <td className="num">{signed(p.avg_excess_pct)}</td>
+              <td className="num">{signed(p.avg_signed_return_pct, "%")}</td>
+              <td className="num">{signed(p.avg_signed_excess_pct)}</td>
             </tr>
           ))}
         </tbody>

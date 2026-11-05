@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { api, type RiskDecision, type Trade } from "@/lib/api";
-import { formatDecimalString, formatUtc } from "@/lib/format";
+import { formatDecimalString, formatScore, formatUtc } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -99,7 +99,7 @@ function DecisionList({ decisions }: { decisions: RiskDecision[] }) {
             <h3>
               {d.decision.toUpperCase()} · {d.action.replace("_", " ")} {d.symbol}{" "}
               <span className="muted">
-                · confidence {formatDecimalString(d.confidence, 2, 2)} · {formatUtc(d.decided_at)}
+                · {formatScore(d.confidence)} · {formatUtc(d.decided_at)}
               </span>
             </h3>
             {d.approved_notional ? (

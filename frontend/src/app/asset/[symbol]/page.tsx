@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { PriceChart } from "@/components/PriceChart";
 import { api, type Bar, type Indicator, type Interval } from "@/lib/api";
 import { toSeries } from "@/lib/chart";
-import { formatDecimalString, formatUtc } from "@/lib/format";
+import { formatDecimalString, formatScore, formatUtc } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -139,8 +139,8 @@ export default async function AssetPage({
           <ul>
             {signals.data.slice(0, 8).map((x) => (
               <li key={x.id}>
-                {formatUtc(x.generated_at)} · {x.action.replace("_", " ")} · confidence{" "}
-                {formatDecimalString(x.confidence, 2, 2)} · <Link href={`/signals/${x.id}`}>trace</Link>
+                {formatUtc(x.generated_at)} · {x.action.replace("_", " ")} ·{" "}
+                {formatScore(x.confidence)} · <Link href={`/signals/${x.id}`}>trace</Link>
               </li>
             ))}
           </ul>

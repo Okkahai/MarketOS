@@ -84,9 +84,10 @@ def make_signal(db, symbol="AAPL", action="BUY", conf="0.700", at=T0, **kw) -> S
         s.flush()
         sig = Signal(analysis_id=analysis.id, asset_id=asset.id, generated_at=at, action=action,
                      confidence=D(conf), time_horizon="7d",
-                     reference_price=D("100"), key_catalysts=[], risks=[],
+                     key_catalysts=[], risks=[],
                      invalidation_conditions=[], evidence=[], thesis="t", bear_case="b",
-                     **{"direction": "long", "reference_price_ts": FRI, **kw})  # fmt: skip
+                     **{"direction": "long", "reference_price": D("100"), "reference_price_ts": FRI,
+                        **kw})  # fmt: skip
         s.add(sig)
         s.commit()
         return sig
@@ -107,13 +108,15 @@ def check_books(db):
             assert reconcile(s, p) == []
 
 
-def bought(db, **kw):
-    """AAPL bought on Tuesday's open (100): 400 notional, 3.998 shares at 100.05."""
+def bought(db, entry_low="99", entry_high="101", **kw):
+    """AAPL bought on Tuesday's open (100): 400 notional, 3.998 shares at 100.05. Tuesday's
+    range stays inside the default 8% stop unless entry_low says otherwise."""
     flat_bars(db, "AAPL")
     make_signal(db, **kw)
     cycle(db, T0)
     tue = MON + timedelta(days=1)
-    put_bars(db, "AAPL", bar(FRI, "100", "100", "100", "100"), bar(tue, "100", "101", "90", "100"))
+    put_bars(db, "AAPL", bar(FRI, "100", "100", "100", "100"),
+             bar(tue, "100", entry_high, entry_low, "100"))  # fmt: skip
     cycle(db, T0 + timedelta(days=1, hours=4))  # Wednesday 01:00 UTC: Tuesday's bar is usable
 
 
@@ -126,7 +129,7 @@ def test_signal_becomes_decision_order_and_a_fill_at_the_next_open(db):
     cycle(db, T0)
     (decision,) = rows(db, RiskDecision)
     assert decision.signal_id == sig.id and decision.decision == "approved"
-    assert decision.approved_notional == D(400) and decision.engine_version == "risk-1"
+    assert decision.approved_notional == D(400) and decision.engine_version == "risk-2"
     assert decision.rules_evaluated and decision.config["max_position_pct"] == "10"
     (order,) = rows(db, Order)
     assert order.status == "pending" and order.side == "BUY" and order.signal_time == T0
@@ -177,6 +180,50 @@ def test_pending_order_expires_when_no_price_ever_arrives(db):
     assert rows(db, Portfolio)[0].cash == D(10000)
 
 
+def test_an_order_never_fills_on_a_bar_that_opens_after_it_expired(db):
+    """Worker down from Monday to Saturday: Friday's bar opens after the 72 h expiry (F4)."""
+    flat_bars(db, "AAPL")
+    make_signal(db)
+    cycle(db, T0)
+    fri = MON + timedelta(days=4)
+    put_bars(db, "AAPL", bar(FRI, "100", "100", "100", "100"), bar(fri, "120", "121", "119", "120"))
+    cycle(db, T0 + timedelta(days=5))  # Saturday
+    assert rows(db, Order)[0].status == "expired" and rows(db, Trade) == []
+    assert rows(db, Portfolio)[0].cash == D(10000)
+
+
+def test_a_bar_opening_exactly_at_expiry_is_outside_the_window(db):
+    at = datetime(2026, 8, 3, 21, 30, tzinfo=UTC)  # + 40 h = Wednesday 13:30 UTC, the open
+    flat_bars(db, "AAPL")
+    make_signal(db, at=at)
+    cycle(db, at, paper_order_expiry_hours=40)
+    wed = MON + timedelta(days=2)
+    put_bars(db, "AAPL", bar(FRI, "100", "100", "100", "100"), bar(wed, "100", "101", "99", "100"))
+    cycle(db, at + timedelta(days=2, hours=4), paper_order_expiry_hours=40)  # bar is usable
+    assert rows(db, Order)[0].status == "expired" and rows(db, Trade) == []
+
+
+def test_daily_cap_counts_pending_orders(db):
+    """Three buys in one cycle with a cap of one: only the first is approved (F5)."""
+    for sym in ("AAPL", "MSFT", "JPM"):
+        flat_bars(db, sym)
+        make_signal(db, sym)
+    cycle(db, T0, paper_max_trades_per_day=1)
+    decisions = rows(db, RiskDecision, RiskDecision.created_at)
+    assert [d.decision for d in decisions] == ["approved", "rejected", "rejected"]
+    assert all(any("daily_trade_cap" in r for r in d.reasons) for d in decisions[1:])
+
+
+def test_cooldown_sees_a_pending_order_in_the_same_asset(db):
+    flat_bars(db, "AAPL")
+    make_signal(db)
+    cycle(db, T0)
+    make_signal(db, at=T0 + timedelta(hours=1))
+    cycle(db, T0 + timedelta(hours=1))
+    last = rows(db, RiskDecision, RiskDecision.created_at)[-1]
+    assert last.decision == "rejected" and any("cooldown" in r for r in last.reasons)
+
+
 def test_pending_buys_reserve_cash_and_sector_room(db):
     """Three tech buys at the 10% cap: the 30% sector cap must hold before any of them fills."""
     for sym in ("AAPL", "MSFT", "NVDA", "AMD"):
@@ -215,8 +262,15 @@ def test_crypto_fills_on_the_first_minute_bar_after_the_decision_with_fees(db):
 # --- exits ----------------------------------------------------------------------------------
 
 
-def test_stop_loss_gap_fills_at_the_open_and_ignores_the_entry_bar(db):
-    bought(db)  # Tuesday's own low (90) is below the stop (92.046) but before/at the entry
+@pytest.fixture
+def risk1(monkeypatch):
+    """Decisions recorded under the old engine version, to check positions opened before M1."""
+    monkeypatch.setattr("app.trading.engine.ENGINE_VERSION", "risk-1")
+
+
+def test_stop_loss_gap_fills_at_the_open_and_ignores_the_entry_bar(db, risk1):
+    """risk-1 positions keep the old rule: the entry bar is not checked, nothing is re-dated."""
+    bought(db, entry_low="90")  # Tuesday's own low (90) is below the stop (92.046)
     assert rows(db, Position)[0].closed_at is None
     wed = MON + timedelta(days=2)
     put_bars(db, "AAPL", bar(wed, "85", "86", "80", "82"))
@@ -229,6 +283,32 @@ def test_stop_loss_gap_fills_at_the_open_and_ignores_the_entry_bar(db):
     (pos,) = rows(db, Position)
     assert pos.closed_at is not None and pos.quantity == 0
     check_books(db)
+
+
+def test_risk2_checks_the_entry_bar_for_the_stop(db):
+    """The fill was the session's first print, so Tuesday's low came after the entry (F6)."""
+    bought(db, entry_low="90")
+    assert rows(db, Position)[0].closed_at is None  # filled this cycle; exits run first
+    cycle(db, T0 + timedelta(days=1, hours=5))
+    sell = rows(db, Trade, Trade.seq)[-1]
+    assert (sell.side, sell.reason, sell.reference_price) == ("SELL", "stop_loss", D("92.046"))
+    assert sell.price_ts == MON + timedelta(days=1)
+    assert sell.executed_at == stock_daily_available_at((MON + timedelta(days=1)).date())
+    assert rows(db, Position)[0].closed_at is not None
+    check_books(db)
+
+
+def test_risk2_entry_bar_touching_stop_and_target_takes_the_stop(db):
+    bought(db, entry_low="90", entry_high="120", suggested_take_profit_pct=D(10))
+    cycle(db, T0 + timedelta(days=1, hours=5))
+    sell = rows(db, Trade, Trade.seq)[-1]
+    assert (sell.reason, sell.reference_price) == ("stop_loss", D("92.046"))
+
+
+def test_risk2_entry_bar_that_opens_at_its_low_does_not_stop(db):
+    bought(db, entry_low="100")  # open == low: the stop is never reached
+    cycle(db, T0 + timedelta(days=1, hours=5))
+    assert [t.side for t in rows(db, Trade)] == ["BUY"]
 
 
 def test_take_profit_fills_at_the_target_and_stop_wins_a_double_hit(db):

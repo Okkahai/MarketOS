@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { api, type Analysis, type Signal } from "@/lib/api";
-import { formatDecimalString } from "@/lib/format";
+import { formatDecimalString, formatScore } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -90,7 +90,7 @@ function SignalCard({ signal: s }: { signal: Signal }) {
       <h3>
         {s.action.replace("_", " ")} {s.symbol}{" "}
         <span className="muted">
-          · confidence {formatDecimalString(s.confidence, 2, 2)} · horizon {s.time_horizon}
+          · {formatScore(s.confidence)} · horizon {s.time_horizon}
         </span>
       </h3>
       <p className="muted">
