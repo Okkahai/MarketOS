@@ -328,15 +328,18 @@ export type AnalyticsSummary = {
     closed_at: string;
     signal_id: string;
   }[];
-  predictions: {
-    horizon: string;
-    evaluated: number;
-    directional: number;
-    hit_rate: number | null;
-    avg_return_pct: number | null;
-    avg_excess_pct: number | null;
-  }[];
+  predictions: (PredictionStats & { horizon: string; by_action: (PredictionStats & { action: string })[] })[];
   notes: string;
+};
+
+// Returns are signed by the call's direction: a correct AVOID or SELL counts as a gain.
+export type PredictionStats = {
+  evaluated: number;
+  directional: number;
+  hit_rate: number | null;
+  avg_signed_return_pct: number | null;
+  avg_signed_excess_pct: number | null;
+  excess_judged: number;
 };
 
 export type Evaluation = {

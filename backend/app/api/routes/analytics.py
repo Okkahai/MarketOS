@@ -89,23 +89,51 @@ def summary(session: Db) -> SummaryOut:
         for pos, sym in closed
     ]  # fmt: skip
 
-    evals = session.scalars(select(PerformanceEvaluation)).all()
+    evals = session.execute(
+        select(PerformanceEvaluation, Signal.action, Asset.symbol)
+        .join(Signal, Signal.id == PerformanceEvaluation.signal_id)
+        .join(Asset, Asset.id == Signal.asset_id)
+    ).all()
     predictions = []
     for h in ("1d", "3d", "7d", "30d"):
-        rows = [e for e in evals if e.horizon == h]
-        judged = [e for e in rows if e.direction_correct is not None]
-        excess = [float(e.excess_return_pct) for e in rows if e.excess_return_pct is not None]
-        predictions.append({
-            "horizon": h, "evaluated": len(rows), "directional": len(judged),
-            "hit_rate": sum(e.direction_correct for e in judged) / len(judged) if judged else None,
-            "avg_return_pct": sum(float(e.return_pct) for e in rows) / len(rows) if rows else None,
-            "avg_excess_pct": sum(excess) / len(excess) if excess else None,
-        })  # fmt: skip
+        rows = [r for r in evals if r[0].horizon == h]
+        by_action = [
+            {"action": a, **_prediction_stats([r for r in rows if r[1] == a])}
+            for a in sorted({r[1] for r in rows})
+        ]
+        predictions.append({"horizon": h, **_prediction_stats(rows), "by_action": by_action})
     return SummaryOut(
         portfolio=portfolio, benchmarks=benchmarks,
         trades=metrics.trade_stats([c.realized_pnl for c in closed_out]),
         closed_positions=closed_out[:50], predictions=predictions, notes=NOTES,
     )  # fmt: skip
+
+
+def _mean(xs: list[float]) -> float | None:
+    return sum(xs) / len(xs) if xs else None
+
+
+def _prediction_stats(rows: list[Any]) -> dict[str, Any]:
+    """Returns are signed by the call's direction (a correct AVOID is a gain); HOLD makes no
+    call and is left out of the averages. Signals on the benchmark itself (SPY vs SPY) have an
+    excess of 0 by construction and are left out of the excess average."""
+    judged = [e for e, _, _ in rows if e.direction_correct is not None]
+    signed, signed_excess = [], []
+    for e, action, symbol in rows:
+        sign = metrics.direction_sign(action)
+        if sign is None:
+            continue
+        signed.append(sign * float(e.return_pct))
+        if e.excess_return_pct is not None and e.benchmark_symbol != symbol:
+            signed_excess.append(sign * float(e.excess_return_pct))
+    return {
+        "evaluated": len(rows),
+        "directional": len(judged),
+        "hit_rate": sum(e.direction_correct for e in judged) / len(judged) if judged else None,
+        "avg_signed_return_pct": _mean(signed),
+        "avg_signed_excess_pct": _mean(signed_excess),
+        "excess_judged": len(signed_excess),
+    }
 
 
 @router.get("/evaluations", response_model=list[EvaluationOut])

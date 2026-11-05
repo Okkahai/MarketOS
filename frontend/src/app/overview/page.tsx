@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { formatDecimalString, formatUtc } from "@/lib/format";
+import { formatDecimalString, formatScore, formatUtc } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -66,7 +66,7 @@ export default async function OverviewPage() {
               <li key={s.id}>
                 {formatUtc(s.generated_at)} · {s.action.replace("_", " ")}{" "}
                 <Link href={`/asset/${encodeURIComponent(s.symbol)}`}>{s.symbol}</Link> ·{" "}
-                {formatDecimalString(s.confidence, 2, 2)} · <Link href={`/signals/${s.id}`}>trace</Link>
+                {formatScore(s.confidence)} · <Link href={`/signals/${s.id}`}>trace</Link>
               </li>
             ))}
           </ul>

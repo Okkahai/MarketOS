@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatMoneyString, formatUtc, safeHttpUrl } from "./format";
+import { formatMoneyString, formatScore, formatUtc, safeHttpUrl } from "./format";
 
 describe("formatMoneyString", () => {
   it("groups thousands and keeps exact cents", () => {
@@ -73,5 +73,11 @@ describe("safeHttpUrl", () => {
     expect(safeHttpUrl("javascript:alert(1)")).toBeNull();
     expect(safeHttpUrl("data:text/html,x")).toBeNull();
     expect(safeHttpUrl("not a url")).toBeNull();
+  });
+});
+
+describe("formatScore", () => {
+  it("never shows a signal's confidence as if it were a probability", () => {
+    expect(formatScore("0.7000")).toBe("score 0.70 (uncalibrated)");
   });
 });

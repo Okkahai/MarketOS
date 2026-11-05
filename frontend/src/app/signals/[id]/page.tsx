@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { api } from "@/lib/api";
-import { formatDecimalString, formatUtc } from "@/lib/format";
+import { formatDecimalString, formatScore, formatUtc } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +50,7 @@ export default async function TracePage({ params }: { params: Promise<{ id: stri
       <section className="card">
         <h2>2. What the AI said</h2>
         <p className="muted">
-          {formatUtc(s.generated_at)} · confidence {formatDecimalString(s.confidence, 2, 2)} · horizon{" "}
+          {formatUtc(s.generated_at)} · {formatScore(s.confidence)} · horizon{" "}
           {s.time_horizon} · price seen {formatDecimalString(s.reference_price)} (bar{" "}
           {s.reference_price_ts.slice(0, 10)}) · model {t.analysis.model_version ?? t.analysis.model},
           prompt {t.analysis.prompt_version}

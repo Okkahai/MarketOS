@@ -131,3 +131,46 @@ def test_summary_and_evaluations_api(db):
     assert (h1["evaluated"], h1["hit_rate"]) == (2, 0.5)  # one right, one wrong, both counted
     wrong = api.get("/api/v1/analytics/evaluations?wrong_only=true").json()
     assert [w["action"] for w in wrong] == ["SELL"]
+
+
+def test_old_signals_cannot_starve_newer_ones(db, monkeypatch):
+    """Pages of one: every run walks all signals with a due, missing horizon (F2)."""
+    monkeypatch.setattr("app.analytics.evaluate.PER_RUN", 1)
+    market(db)
+    sigs = [make_signal(db, at=T0 + timedelta(minutes=i)) for i in range(3)]
+    evaluate(db, T0 + timedelta(days=2))
+    evs = rows(db, PerformanceEvaluation)
+    assert sorted(e.signal_id for e in evs) == sorted(s.id for s in sigs)
+    assert {e.horizon for e in evs} == {"1d"}
+    newest = make_signal(db, at=T0 + timedelta(minutes=10))
+    evaluate(db, T0 + timedelta(days=2))  # the three older ones still miss 3d, 7d, 30d
+    assert newest.id in {e.signal_id for e in rows(db, PerformanceEvaluation)}
+
+
+def test_prediction_averages_are_signed_by_the_call_and_skip_self_benchmarks(db):
+    """A BUY that rose 2% and an AVOID that fell 2% both earned 2% (F8)."""
+    from app.db.session import get_db
+    from app.main import create_app
+
+    app = create_app()
+
+    def override():
+        with db() as s:
+            yield s
+
+    app.dependency_overrides[get_db] = override
+    market(db)  # AAPL +2%, SPY +1% on Monday
+    put_bars(db, "MSFT", bar(FRI, "100", "100", "100", "100"), bar(MON, "100", "100", "97", "98"))
+    make_signal(db, "AAPL", action="BUY")
+    make_signal(db, "MSFT", action="AVOID")
+    make_signal(db, "SPY", action="BUY", reference_price=D("400"))  # SPY vs SPY: excess 0
+    make_signal(db, "AAPL", action="HOLD")
+    evaluate(db, T0 + timedelta(days=2))
+    h1 = next(x for x in TestClient(app).get("/api/v1/analytics/summary").json()["predictions"]
+              if x["horizon"] == "1d")  # fmt: skip
+    assert h1["evaluated"] == 4 and h1["hit_rate"] == 1.0
+    assert h1["avg_signed_return_pct"] == pytest.approx((2 + 2 + 1) / 3)
+    assert h1["excess_judged"] == 2  # AAPL +1 and MSFT -3 signed +3; SPY is left out
+    assert h1["avg_signed_excess_pct"] == pytest.approx(2.0)
+    avoid = next(a for a in h1["by_action"] if a["action"] == "AVOID")
+    assert (avoid["evaluated"], avoid["avg_signed_return_pct"]) == (1, pytest.approx(2.0))

@@ -1,13 +1,14 @@
 """Judging past recommendations. For each signal and horizon, once the horizon has fully elapsed,
 compare the last price the model saw with the last daily close inside the horizon, using only
 bars that were available by now. Written once and never changed; a horizon without enough bars
-is retried on the next run, never estimated."""
+is retried on the next run, never estimated. Each run walks every signal with a due, missing
+horizon in keyset pages of PER_RUN, so old signals cannot starve newer ones."""
 
 import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import exists, or_, select, tuple_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -92,6 +93,31 @@ def evaluate_one(
     )  # fmt: skip
 
 
+def _pending_page(session: Session, now: datetime, cursor: tuple[datetime, uuid.UUID] | None):
+    """One keyset page of live signals that still miss at least one horizon, oldest first.
+    shortcut: a signal that can never be judged (weekend 1d, data gap) stays in the queue and is
+    re-read every run; it no longer blocks newer signals. Terminal statuses come with M2."""
+    due_and_missing = or_(
+        *(
+            (Signal.generated_at <= now - timedelta(days=days))
+            & ~exists().where(
+                PerformanceEvaluation.signal_id == Signal.id, PerformanceEvaluation.horizon == h
+            )
+            for h, days in HORIZON_DAYS.items()
+        )
+    )
+    q = (
+        select(Signal, Asset)
+        .join(Asset, Asset.id == Signal.asset_id)
+        .where(Signal.mode == "live_paper", due_and_missing)
+        .order_by(Signal.generated_at, Signal.id)
+        .limit(PER_RUN)
+    )
+    if cursor is not None:
+        q = q.where(tuple_(Signal.generated_at, Signal.id) > cursor)
+    return session.execute(q).all()
+
+
 def run_evaluate_signals(
     session_factory: sessionmaker[Session], *, clock: Clock | None = None
 ) -> uuid.UUID:
@@ -100,33 +126,34 @@ def run_evaluate_signals(
         now = clock.now()
         written = waiting = 0
         with session_factory() as session:
-            done = {
-                (s, h) for s, h in session.execute(
-                    select(PerformanceEvaluation.signal_id, PerformanceEvaluation.horizon)
-                )
-            }  # fmt: skip
-            rows = session.execute(
-                select(Signal, Asset)
-                .join(Asset, Asset.id == Signal.asset_id)
-                .where(Signal.mode == "live_paper", Signal.generated_at <= now - DAY)
-                .order_by(Signal.generated_at)
-                .limit(PER_RUN)
-            ).all()
-            for sig, asset in rows:
-                for horizon in HORIZON_DAYS:
-                    if (sig.id, horizon) in done:
-                        continue
-                    values = evaluate_one(session, sig, asset, horizon, now)
-                    if values is None:
-                        waiting += 1
-                        continue
-                    session.execute(
-                        insert(PerformanceEvaluation)
-                        .values(**values)
-                        .on_conflict_do_nothing(index_elements=["signal_id", "horizon"])
+            cursor: tuple[datetime, uuid.UUID] | None = None
+            while True:
+                page = _pending_page(session, now, cursor)
+                for sig, asset in page:
+                    done = set(
+                        session.scalars(
+                            select(PerformanceEvaluation.horizon).where(
+                                PerformanceEvaluation.signal_id == sig.id
+                            )
+                        )
                     )
-                    written += 1
-            session.commit()
+                    for horizon in HORIZON_DAYS:
+                        if horizon in done:
+                            continue
+                        values = evaluate_one(session, sig, asset, horizon, now)
+                        if values is None:
+                            waiting += 1
+                            continue
+                        session.execute(
+                            insert(PerformanceEvaluation)
+                            .values(**values)
+                            .on_conflict_do_nothing(index_elements=["signal_id", "horizon"])
+                        )
+                        written += 1
+                session.commit()
+                if len(page) < PER_RUN:
+                    break
+                cursor = (page[-1][0].generated_at, page[-1][0].id)
         ctx.items_written = written
         ctx.details = {"written": written, "not_ready": waiting}
         return ctx.run_id

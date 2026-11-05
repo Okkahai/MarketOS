@@ -74,3 +74,10 @@ def direction_correct(action: str, return_pct: float) -> bool | None:
     if action in ("SELL", "REDUCE", "AVOID"):
         return return_pct < 0
     return None
+
+
+def direction_sign(action: str) -> int | None:
+    """+1 for bullish actions, -1 for bearish ones, None for HOLD. Multiplying a return by it
+    gives the return of acting on the call, so a correct AVOID counts as a gain."""
+    correct = direction_correct(action, 1.0)
+    return None if correct is None else (1 if correct else -1)
