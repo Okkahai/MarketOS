@@ -21,8 +21,8 @@ the Tiingo token, and start a live run.
 
 ## 3. First actions for the new coordinator
 
-1. Confirm `migration/handoff` was pushed and merged (MOS-MIG-1). If not, the docs exist only in
-   the old project's files folder `migration/` and in a cloud sandbox that will be reclaimed.
+1. The handoff docs are on `main` (PR #14, MOS-MIG-1 done). Re-check `git log origin/main` for
+   anything merged after 2026-11-10.
 2. Ask Gün, in one message, the open questions in §6 (at minimum Q-01, Q-02, Q-03).
 3. Ask Gün to approve M2 (scope in TASK_REGISTRY MOS-M2). Do not start before the answer.
 4. Once approved: one worktree per milestone, e.g.
@@ -32,7 +32,7 @@ the Tiingo token, and start a live run.
 
 ## 4. Recommended execution order
 
-1. MOS-MIG-1 publish this handoff (needs approval to push).
+1. ~~MOS-MIG-1 publish this handoff~~ done (PR #14).
 2. MOS-CFG-1 merge rule for agents; MOS-SEC-1 rotate token (Gün).
 3. MOS-OPS-1 / MOS-OPS-2 deploy and live run (Gün acts; agents guide). Starts the data clock, which
    M8 and M9 need and which takes months — so start it early, in parallel with code work.
@@ -63,6 +63,10 @@ the Tiingo token, and start a live run.
 | Q-07 | May the merged branches `claude/phase1-foundation-y6tj5f` and `claude/project-thread-vmcf8w` be deleted? | hygiene |
 
 ## 7. Migration readiness audit (2026-11-09)
+
+**Verdict: READY FOR MIGRATION** once PR #14 is on `main`: all code is merged, no work is in
+flight, and every decision and open task is recorded here. Open items are Gün's decisions and
+actions (§6), not lost state.
 
 Cross-checked: GitHub (PRs #1–#13, branches, issues, CI runs), repo `main`, project memory (5
 files), the four thread records and project chat, the project files folder.

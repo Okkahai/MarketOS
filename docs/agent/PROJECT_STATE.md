@@ -132,7 +132,7 @@ advised. Not confirmed done → MOS-SEC-1.
 | `main` | `3232003` | merge of PR #13; CI success (run 42030043402) |
 | `claude/project-thread-vmcf8w` | `cab3f23` | fully merged (PR #13), 0 commits ahead of main |
 | `claude/phase1-foundation-y6tj5f` | `968a9e3` | fully merged (PR #12), 0 commits ahead of main |
-| `migration/handoff` (local, this snapshot) | see commit | **not pushed**: adds AGENTS.md, CLAUDE.md, docs/agent/*, docs/audit/* |
+| `migration/handoff` | merged via PR #14 | adds AGENTS.md, CLAUDE.md, docs/agent/*, docs/audit/* (docs only) |
 
 PRs: #1–#13 all merged, **no open PRs, no issues**. No unmerged or uncommitted work exists in any
 remote branch. The two `claude/*` branches can be deleted after Gün approves (MOS-GIT-1).
@@ -144,7 +144,7 @@ remote branch. The two `claude/*` branches can be deleted after Gün approves (M
 | "MarketOS architecture and Phase 1" | `cse_01AmLMAHJUFLrv3QAuJibRHF` | done, resolved | last ask to Gün: create Hetzner server, send IP (MOS-OPS-1) |
 | "Audit MarketOS correctness and architecture" | `cse_01EkSrunPE1ogHXVKf4zQCV1` | done, not resolved | none; M1 approved there |
 | "Implement M1 correctness fixes" | `cse_01EkSrujLAtC1EFYWG5DWsyk` | done, resolved | M2 awaits approval |
-| "Prepare migration handoff for T3 Code" | `cse_01EkSrunHsZPjNL1orhjoP5D` | this snapshot | push of `migration/handoff` |
+| "Prepare migration handoff for T3 Code" | `cse_01EkSrunHsZPjNL1orhjoP5D` | done | none (PR #14 merged) |
 
 No thread is running. Stopping these sessions loses nothing that is not in git or in this folder,
 **except**: the seven audit reproduction probes (`test_A,B,C,E,F,G,weekend`) were throwaway files in

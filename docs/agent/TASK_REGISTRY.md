@@ -38,7 +38,7 @@ or memory; low = inferred.
 | MOS-DEBT-1 | SQLAlchemy `distinct(expr)` deprecation → `postgresql.distinct_on` | ready | P3 | yes (small) | — |
 | MOS-DEBT-2 | Add `AI_MAX_OUTPUT_TOKENS`, `AI_TIMEOUT_SECONDS` to `.env.example` | ready | P3 | yes (small) | — |
 | MOS-DOC-1 | Stale `marketos/ARCHITECTURE.md` in old project files | done (repo is authoritative) | — | — | — |
-| MOS-MIG-1 | Push `migration/handoff` and open PR | waiting-user | **P0 for migration** | **yes** | — |
+| MOS-MIG-1 | Publish handoff docs on `main` | done (PR #14, merged on Gün's approval 2026-11-10) | — | — | — |
 | MOS-GIT-1 | Delete merged branches `claude/phase1-foundation-y6tj5f`, `claude/project-thread-vmcf8w` | waiting-user | P3 | yes | — |
 | MOS-CFG-1 | Confirm merge authority for agents in T3 Code | waiting-user | P1 | Gün decides | — |
 
@@ -193,9 +193,8 @@ Small hygiene; bundle into any milestone PR. DEBT-1 sites: `trading/engine.py:80
 
 ## MOS-MIG-1 — Publish the handoff
 
-- Local branch `migration/handoff` in the cloud sandbox (not durable) with this file set; copies in
-  the old project's files folder `migration/`. Next action: Gün approves push → `git push -u origin
-  migration/handoff` and open a docs-only PR. Until pushed, the new environment cannot see these docs.
+- Done: branch `migration/handoff` pushed and merged to `main` via PR #14 on Gün's approval
+  (2026-11-10). Backup copies remain in the old project's files folder `migration/`.
 
 ## MOS-CFG-1 — Merge authority
 
