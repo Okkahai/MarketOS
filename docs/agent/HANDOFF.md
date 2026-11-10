@@ -33,8 +33,8 @@ the Tiingo token, and start a live run.
 ## 4. Recommended execution order
 
 1. ~~MOS-MIG-1 publish this handoff~~ done (PR #14).
-2. MOS-CFG-1 merge rule for agents; MOS-SEC-1 rotate token (Gün).
-3. MOS-OPS-1 / MOS-OPS-2 deploy and live run (Gün acts; agents guide). Starts the data clock, which
+2. MOS-CFG-1 merge rule for agents.
+3. MOS-OPS-1 / MOS-OPS-2 deploy and live run, handled in a separate agent environment. Starts the data clock, which
    M8 and M9 need and which takes months — so start it early, in parallel with code work.
 4. **MOS-M2** evaluation v2 + calendar (P0), with MOS-M1-FU1 folded in.
 5. MOS-M3 execution-time model and MOS-M5 strategy identity (independent; parallel worktrees ok,
@@ -51,6 +51,10 @@ the Tiingo token, and start a live run.
 - Do not re-propose rejected approaches (DECISIONS.md list).
 
 ## 6. Open questions for Gün
+
+Answered by Gün on 2026-11-10: **Q-01 and Q-04** are moot, because the server will be set up in a
+separate agent environment, so this handoff does not track deployment or the token. **Q-07: do not
+delete anything** (no branches, no files, no history).
 
 | ID | Question | Why it matters |
 |---|---|---|

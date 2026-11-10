@@ -23,10 +23,10 @@ or memory; low = inferred.
 | MOS-M8 | Event-intelligence measurement + cheap fixes | blocked | P2 | yes | MOS-OPS-2 (live news) |
 | MOS-M9 | ML dataset, splits, first model (gated) | blocked | P3 | yes | M2, M5, M6, data gate |
 | MOS-M10 | Optional LLMResearchStrategy (forward-test only, off by default) | blocked | P3 | yes | M5 |
-| MOS-OPS-1 | Deploy on Hetzner CX23 via docs/DEPLOY.md | waiting-user | P1 | Gün acts | — |
+| MOS-OPS-1 | Deploy the server (docs/DEPLOY.md) | moved: separate agent environment (Gün, 2026-11-10) | P1 | — | — |
 | MOS-OPS-2 | First full live run (Tiingo news, SEC, Fed, Coinbase) | waiting-user | P1 | Gün acts | keys in `.env` |
 | MOS-OPS-3 | Check Tiingo `splitFactor`/`divCash`/`adjClose` live (U1) | waiting-user | P1 | Gün acts | TIINGO_API_KEY |
-| MOS-SEC-1 | Rotate Tiingo token pasted in chat 2026-11-03 | waiting-user | P1 | Gün acts | — |
+| MOS-SEC-1 | Rotate Tiingo token pasted in chat 2026-11-03 | moved with MOS-OPS-1 (Gün, 2026-11-10) | P1 | — | — |
 | MOS-SEC-2 | Login/password gate before exposing ports 3000/8000 | deferred | P1 if exposed | yes | — |
 | MOS-INV-1 | U2 re-analysis on portfolio-only changes | investigate | P2 | no (read-only) | — |
 | MOS-INV-2 | U3 event membership with hindsight | investigate | P2 | no | — |
@@ -39,7 +39,7 @@ or memory; low = inferred.
 | MOS-DEBT-2 | Add `AI_MAX_OUTPUT_TOKENS`, `AI_TIMEOUT_SECONDS` to `.env.example` | ready | P3 | yes (small) | — |
 | MOS-DOC-1 | Stale `marketos/ARCHITECTURE.md` in old project files | done (repo is authoritative) | — | — | — |
 | MOS-MIG-1 | Publish handoff docs on `main` | done (PR #14, merged on Gün's approval 2026-11-10) | — | — | — |
-| MOS-GIT-1 | Delete merged branches `claude/phase1-foundation-y6tj5f`, `claude/project-thread-vmcf8w` | waiting-user | P3 | yes | — |
+| MOS-GIT-1 | Delete merged branches | **cancelled: Gün said do not delete anything** (2026-11-10) | — | — | — |
 | MOS-CFG-1 | Confirm merge authority for agents in T3 Code | waiting-user | P1 | Gün decides | — |
 
 ---
@@ -159,7 +159,8 @@ or memory; low = inferred.
 - **Status:** waiting on Gün since 2026-11-03 22:02Z: create Hetzner account and CX23 server
   (Germany/Finland, Ubuntu 24.04, firewall only TCP 22), send the IP. Then walk docs/DEPLOY.md
   §2–6 (Docker, `.env`, `docker compose up --build -d`, SSH tunnel, backups).
-- **Unknown:** whether Gün did this (Q-01). Thread `cse_01AmLMAHJUFLrv3QAuJibRHF`. Confidence: medium.
+- **2026-11-10:** Gün said the server will be set up in a separate agent environment; not tracked here.
+- **Previously unknown:** whether Gün did this (Q-01). Thread `cse_01AmLMAHJUFLrv3QAuJibRHF`. Confidence: medium.
 
 ## MOS-OPS-2 — First live run
 
